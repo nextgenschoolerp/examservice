@@ -20,6 +20,9 @@ public final class ExamRoles {
     /** Read terms, subjects, scales, broadsheets, rank lists and completeness */
     public static final String VIEW = "hasAnyRole(" + TEACHING + ", 'REGISTRAR')";
 
+    /** School-wide results of a term (Academics outlook): school leadership and the exam controller, not individual teachers */
+    public static final String SCHOOL_RESULTS = "hasAnyRole('SCHOOL_PRINCIPAL', 'VICE_PRINCIPAL', 'EXAM_CONTROLLER', 'ACADEMIC_AUDITOR', 'SUPER_ADMIN')";
+
     /** US-05003: web mark entry */
     public static final String ENTER_MARKS = "hasAnyRole('SUBJECT_TEACHER', 'CLASS_TEACHER', 'EXAM_CONTROLLER', 'SUPER_ADMIN')";
 

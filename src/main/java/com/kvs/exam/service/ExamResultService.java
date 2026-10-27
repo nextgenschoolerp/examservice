@@ -26,6 +26,7 @@ import com.kvs.exam.repo.AcademicSessionRepository;
 import com.kvs.exam.repo.CoScholasticGradeRepository;
 import com.kvs.exam.repo.ExamSubjectRepository;
 import com.kvs.exam.repo.ExamTermRepository;
+import com.kvs.exam.repo.GradeRepository;
 import com.kvs.exam.repo.GradingScaleRepository;
 import com.kvs.exam.repo.MarkEntryRepository;
 import com.kvs.exam.repo.ProgressCardRepository;
@@ -75,6 +76,7 @@ public class ExamResultService {
     @Autowired private CoScholasticGradeRepository coScholasticRepository;
     @Autowired private ProgressCardRepository cardRepository;
     @Autowired private SectionRepository sectionRepository;
+    @Autowired private GradeRepository gradeRepository;
     @Autowired private AcademicSessionRepository sessionRepository;
     @Autowired private MarkEntryService markEntryService;
     @Autowired private ExamAccess access;
@@ -187,7 +189,7 @@ public class ExamResultService {
                     .filter(sc -> sc.subject().getExamSubjectId().equals(subject.getExamSubjectId()) && sc.entry() != null).toList();
             List<BigDecimal> got = scores.stream().map(sc -> sc.entry().getAbsent() ? BigDecimal.ZERO : sc.entry().getMarksObtained()).toList();
             return BroadsheetResponse.SubjectSummary.builder()
-                    .subjectCode(subject.getSubjectCode()).subjectName(subject.getSubjectName()).maxMarks(subject.getMaxMarks())
+                    .subjectCode(subject.getSubjectCode()).subjectName(subject.getSubjectName()).maxMarks(subject.getMaxMarks()).passMarks(subject.getPassMarks())
                     .averageMarks(got.isEmpty() ? null : got.stream().reduce(BigDecimal.ZERO, BigDecimal::add)
                             .divide(BigDecimal.valueOf(got.size()), 2, RoundingMode.HALF_UP))
                     .highestMarks(got.stream().max(Comparator.naturalOrder()).orElse(null))
@@ -213,6 +215,24 @@ public class ExamResultService {
                         .grade(r.gradeLabel()).result(r.result()).rank(ranks.get(r.student().getStudentId()))
                         .build()).toList())
                 .build();
+    }
+
+    /**
+     * The broadsheet of every section that has students on roll, in grade order: school-wide results of one term in a single
+     * call (Academics outlook). Each entry is the same broadsheet the Broadsheet tab shows for that section.
+     */
+    @Transactional(readOnly = true)
+    public List<BroadsheetResponse> schoolBroadsheets(UUID examTermId, String branchId) {
+        ExamTerm term = access.term(examTermId);
+        List<BroadsheetResponse> sheets = new ArrayList<>();
+        for (com.kvs.exam.entity.Grade grade : gradeRepository.findByTenantIdOrderBySequenceOrderAsc(term.getTenantId())) {
+            for (Section section : sectionRepository.findByGradeId(grade.getGradeId())) {
+                if (!access.roster(section, term, branchId).isEmpty()) {
+                    sheets.add(broadsheet(examTermId, section.getSectionId(), branchId));
+                }
+            }
+        }
+        return sheets;
     }
 
     // ------------------------------------------------------------------ US-05011 rank list

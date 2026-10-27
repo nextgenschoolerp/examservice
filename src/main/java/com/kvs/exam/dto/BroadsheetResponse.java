@@ -32,6 +32,8 @@ public class BroadsheetResponse {
         private String subjectCode;
         private String subjectName;
         private BigDecimal maxMarks;
+        /** Marks needed to pass this subject, so a result below it can name the subject and the shortfall */
+        private BigDecimal passMarks;
         private BigDecimal averageMarks;
         private BigDecimal highestMarks;
         private int passed;

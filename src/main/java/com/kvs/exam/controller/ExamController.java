@@ -158,6 +158,14 @@ public class ExamController {
         return ResponseEntity.ok(ApiResponse.success(resultService.broadsheet(examTermId, require(sectionId, "sectionId"), branchId)));
     }
 
+    /** School-wide results of a term: the broadsheet of every section with students (Academics outlook; leadership only). */
+    @GetMapping("/terms/{examTermId}/school-results")
+    @PreAuthorize(ExamRoles.SCHOOL_RESULTS)
+    public ResponseEntity<ApiResponse<List<BroadsheetResponse>>> schoolResults(@PathVariable("examTermId") UUID examTermId,
+                                                                               @RequestParam(value = "branchId", required = false) String branchId) {
+        return ResponseEntity.ok(ApiResponse.success(resultService.schoolBroadsheets(examTermId, branchId)));
+    }
+
     @GetMapping("/terms/{examTermId}/rank-list")
     @PreAuthorize(ExamRoles.VIEW)
     public ResponseEntity<ApiResponse<RankListResponse>> rankList(@PathVariable("examTermId") UUID examTermId,
