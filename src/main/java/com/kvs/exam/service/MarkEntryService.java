@@ -3,6 +3,8 @@ package com.kvs.exam.service;
 import com.kvs.core.exception.BadRequestException;
 import com.kvs.core.exception.ConflictException;
 import com.kvs.core.exception.ResourceNotFoundException;
+import com.kvs.exam.dto.MarkChangePage;
+import com.kvs.exam.dto.MarkChangeResponse;
 import com.kvs.exam.dto.MarkCompletenessResponse;
 import com.kvs.exam.dto.MarkSheetResponse;
 import com.kvs.exam.dto.SaveMarksRequest;
@@ -12,6 +14,7 @@ import com.kvs.exam.dto.UnlockTicketResponse;
 import com.kvs.exam.entity.ExamSubject;
 import com.kvs.exam.entity.ExamTerm;
 import com.kvs.exam.entity.Grade;
+import com.kvs.exam.entity.MarkChange;
 import com.kvs.exam.entity.MarkEntry;
 import com.kvs.exam.entity.MarkUnlockTicket;
 import com.kvs.exam.entity.Section;
@@ -19,11 +22,18 @@ import com.kvs.exam.entity.StudentMaster;
 import com.kvs.exam.enums.UnlockTicketStatus;
 import com.kvs.exam.repo.ExamSubjectRepository;
 import com.kvs.exam.repo.GradeRepository;
+import com.kvs.exam.repo.MarkChangeRepository;
 import com.kvs.exam.repo.MarkEntryRepository;
 import com.kvs.exam.repo.MarkUnlockTicketRepository;
 import com.kvs.exam.repo.SectionRepository;
+import com.kvs.exam.repo.StudentMasterRepository;
 import lombok.extern.slf4j.Slf4j;
+import jakarta.persistence.criteria.Predicate;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -54,6 +64,8 @@ public class MarkEntryService {
 
     @Autowired private ExamSubjectRepository subjectRepository;
     @Autowired private MarkEntryRepository markRepository;
+    @Autowired private MarkChangeRepository changeRepository;
+    @Autowired private StudentMasterRepository studentRepository;
     @Autowired private MarkUnlockTicketRepository ticketRepository;
     @Autowired private SectionRepository sectionRepository;
     @Autowired private GradeRepository gradeRepository;
@@ -145,7 +157,21 @@ public class MarkEntryService {
             MarkEntry m = existing.getOrDefault(e.getStudentId(), MarkEntry.builder()
                     .examTermId(examTermId).examSubjectId(subject.getExamSubjectId()).studentId(e.getStudentId())
                     .sectionId(section.getSectionId()).build());
-            m.setMarksObtained(absent ? null : e.getMarksObtained());
+            java.math.BigDecimal newMarks = absent ? null : e.getMarksObtained();
+            boolean existed = existing.containsKey(e.getStudentId());
+            boolean same = existed && m.getAbsent() == absent
+                    && (newMarks == null ? m.getMarksObtained() == null : m.getMarksObtained() != null && m.getMarksObtained().compareTo(newMarks) == 0);
+            if (!same) {
+                changeRepository.save(MarkChange.builder()
+                        .examTermId(examTermId).examSubjectId(subject.getExamSubjectId()).sectionId(section.getSectionId())
+                        .studentId(e.getStudentId())
+                        .oldMarks(existed ? m.getMarksObtained() : null).oldAbsent(existed ? m.getAbsent() : null)
+                        .newMarks(newMarks).newAbsent(absent).changeType(existed ? "CORRECTED" : "ENTERED")
+                        .afterLock(term.isLocked(now)).ticketId(ticket.map(MarkUnlockTicket::getTicketId).orElse(null))
+                        .reason(request.getReason() == null || request.getReason().isBlank() ? null : request.getReason().trim())
+                        .changedBy(user).changedAt(now).build());
+            }
+            m.setMarksObtained(newMarks);
             m.setAbsent(absent);
             m.setEvaluatedBy(user);
             m.setEnteredAt(now);
@@ -156,6 +182,58 @@ public class MarkEntryService {
                 access.className(section) + " " + subject.getSubjectCode() + ": " + changed + " entries"
                         + (ticket.isPresent() ? " under unlock ticket " + ticket.get().getTicketId() : ""));
         return markSheet(examTermId, section.getSectionId(), subject.getSubjectCode(), branchId);
+    }
+
+    /**
+     * One page of the marks change history of a term, newest first. Filters: a class (gradeId) or a section, a subject code,
+     * corrections only, changes made after the lock only. The filters run in the database, so paging counts the filtered rows.
+     */
+    @Transactional(readOnly = true)
+    public MarkChangePage changeHistory(UUID examTermId, UUID gradeId, UUID sectionId, String subjectCode,
+                                        boolean correctionsOnly, boolean afterLockOnly, int page, int size, String order) {
+        ExamTerm term = access.term(examTermId);
+        Set<UUID> sectionIds = sectionId != null ? Set.of(sectionId)
+                : gradeId != null ? sectionRepository.findByGradeId(gradeId).stream().map(Section::getSectionId).collect(Collectors.toSet())
+                : null;
+        Set<UUID> subjectIds = subjectCode == null || subjectCode.isBlank() ? null
+                : subjectRepository.findByExamTermIdOrderByDisplayOrderAsc(examTermId).stream()
+                        .filter(s -> s.getSubjectCode().equalsIgnoreCase(subjectCode.trim())).map(ExamSubject::getExamSubjectId)
+                        .collect(Collectors.toSet());
+        Specification<MarkChange> spec = (root, q, cb) -> {
+            List<Predicate> where = new ArrayList<>();
+            where.add(cb.equal(root.get("examTermId"), examTermId));
+            if (sectionIds != null) where.add(sectionIds.isEmpty() ? cb.disjunction() : root.get("sectionId").in(sectionIds));
+            if (subjectIds != null) where.add(subjectIds.isEmpty() ? cb.disjunction() : root.get("examSubjectId").in(subjectIds));
+            if (correctionsOnly) where.add(cb.equal(root.get("changeType"), "CORRECTED"));
+            if (afterLockOnly) where.add(cb.isTrue(root.get("afterLock")));
+            return cb.and(where.toArray(new Predicate[0]));
+        };
+        int safeSize = Math.max(1, Math.min(size, 100));
+        int safePage = Math.max(0, page);
+        Page<MarkChange> found = changeRepository.findAll(spec,
+                PageRequest.of(safePage, safeSize, Sort.by("asc".equalsIgnoreCase(order) ? Sort.Direction.ASC : Sort.Direction.DESC, "changedAt")));
+        List<MarkChange> changes = found.getContent();
+        Map<UUID, ExamSubject> subjects = subjectRepository.findAllById(changes.stream().map(MarkChange::getExamSubjectId).collect(Collectors.toSet()))
+                .stream().collect(Collectors.toMap(ExamSubject::getExamSubjectId, Function.identity()));
+        Map<UUID, StudentMaster> students = studentRepository.findAllById(changes.stream().map(MarkChange::getStudentId).collect(Collectors.toSet()))
+                .stream().collect(Collectors.toMap(StudentMaster::getStudentId, Function.identity()));
+        Map<UUID, Section> sections = sectionRepository.findAllById(changes.stream().map(MarkChange::getSectionId).collect(Collectors.toSet()))
+                .stream().collect(Collectors.toMap(Section::getSectionId, Function.identity()));
+        List<MarkChangeResponse> items = changes.stream().map(c -> {
+            ExamSubject sub = subjects.get(c.getExamSubjectId());
+            StudentMaster st = students.get(c.getStudentId());
+            Section sec = sections.get(c.getSectionId());
+            return MarkChangeResponse.builder()
+                    .changeId(c.getChangeId()).examTermId(examTermId).termName(term.getTermName())
+                    .className(sec == null ? null : access.className(sec))
+                    .subjectCode(sub == null ? null : sub.getSubjectCode()).subjectName(sub == null ? null : sub.getSubjectName())
+                    .studentId(c.getStudentId()).studentUid(st == null ? null : st.getStudentUid()).studentName(st == null ? null : ExamAccess.fullName(st))
+                    .oldMarks(c.getOldMarks()).oldAbsent(c.getOldAbsent()).newMarks(c.getNewMarks()).newAbsent(c.getNewAbsent())
+                    .changeType(c.getChangeType()).afterLock(Boolean.TRUE.equals(c.getAfterLock())).ticketId(c.getTicketId())
+                    .reason(c.getReason()).changedBy(c.getChangedBy()).changedAt(c.getChangedAt()).build();
+        }).toList();
+        return MarkChangePage.builder().items(items).page(safePage).size(safeSize)
+                .total(found.getTotalElements()).pages(found.getTotalPages()).build();
     }
 
     // ------------------------------------------------------------------ US-05006

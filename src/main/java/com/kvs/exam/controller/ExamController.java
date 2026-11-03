@@ -119,6 +119,23 @@ public class ExamController {
         return ResponseEntity.ok(ApiResponse.success("Marks saved", markEntryService.saveMarks(examTermId, request, branchId)));
     }
 
+    /** Moderation trail: every entry and correction of marks in a term, with who, when, old and new value */
+    @GetMapping("/terms/{examTermId}/mark-changes")
+    @PreAuthorize(ExamRoles.MARK_HISTORY)
+    public ResponseEntity<ApiResponse<com.kvs.exam.dto.MarkChangePage>> markChanges(
+            @PathVariable("examTermId") UUID examTermId,
+            @RequestParam(value = "gradeId", required = false) UUID gradeId,
+            @RequestParam(value = "sectionId", required = false) UUID sectionId,
+            @RequestParam(value = "subjectCode", required = false) String subjectCode,
+            @RequestParam(value = "correctionsOnly", required = false, defaultValue = "false") boolean correctionsOnly,
+            @RequestParam(value = "afterLockOnly", required = false, defaultValue = "false") boolean afterLockOnly,
+            @RequestParam(value = "page", required = false, defaultValue = "0") int page,
+            @RequestParam(value = "size", required = false, defaultValue = "10") int size,
+            @RequestParam(value = "order", required = false, defaultValue = "desc") String order) {
+        return ResponseEntity.ok(ApiResponse.success(markEntryService.changeHistory(examTermId, gradeId, sectionId, subjectCode,
+                correctionsOnly, afterLockOnly, page, size, order)));
+    }
+
     @PostMapping("/terms/{examTermId}/unlock-tickets")
     @PreAuthorize(ExamRoles.REQUEST_UNLOCK)
     public ResponseEntity<ApiResponse<UnlockTicketResponse>> requestUnlock(@PathVariable("examTermId") UUID examTermId,
