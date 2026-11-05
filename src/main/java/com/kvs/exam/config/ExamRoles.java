@@ -23,6 +23,9 @@ public final class ExamRoles {
     /** School-wide results of a term (Academics outlook): school leadership and the exam controller, not individual teachers */
     public static final String SCHOOL_RESULTS = "hasAnyRole('SCHOOL_PRINCIPAL', 'VICE_PRINCIPAL', 'EXAM_CONTROLLER', 'ACADEMIC_AUDITOR', 'SUPER_ADMIN')";
 
+    /** Marks change history (moderation trail): who entered or corrected which mark, and when */
+    public static final String MARK_HISTORY = "hasAnyRole('EXAM_CONTROLLER', 'SCHOOL_PRINCIPAL', 'ACADEMIC_AUDITOR', 'SUPER_ADMIN')";
+
     /** US-05003: web mark entry */
     public static final String ENTER_MARKS = "hasAnyRole('SUBJECT_TEACHER', 'CLASS_TEACHER', 'EXAM_CONTROLLER', 'SUPER_ADMIN')";
 

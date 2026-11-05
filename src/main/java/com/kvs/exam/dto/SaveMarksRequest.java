@@ -31,6 +31,10 @@ public class SaveMarksRequest {
     @Pattern(regexp = "^[A-Z][A-Z0-9_]{1,19}$", message = "subjectCode must be 2-20 upper-case letters, digits or underscores, e.g. MATH")
     private String subjectCode;
 
+    /** Why the marks are entered or corrected (kept in the change history) */
+    @Size(max = 300, message = "reason must be at most 300 characters")
+    private String reason;
+
     @NotEmpty(message = "entries must contain at least one student")
     @Size(max = 80, message = "at most 80 entries per request")
     @Valid

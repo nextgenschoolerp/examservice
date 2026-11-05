@@ -29,7 +29,7 @@ import java.util.regex.Pattern;
  * without duplicating the rules. Same contract as admissionservice's {@code GET /api/v1/admissions/access-rules}.
  */
 @RestController
-@RequestMapping("/api/v1/exams/access-rules")
+@RequestMapping("/api/v1/exam/access-rules")
 public class AccessRuleController {
 
     private static final Pattern ROLE = Pattern.compile("'(?:ROLE_)?([A-Z_]+)'");

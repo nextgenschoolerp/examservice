@@ -16,6 +16,13 @@ import static org.hamcrest.Matchers.greaterThan;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.http.server.PathContainer;
+import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
+import org.springframework.web.util.pattern.PathPatternParser;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.empty;
 
 /**
  * Integration tests for {@link AccessRuleController}: endpoint → allowed roles, read from the running service.
@@ -35,9 +42,9 @@ class AccessRuleControllerIntegrationTest {
     }
 
     @Test
-    @DisplayName("GET /api/v1/exams/access-rules - lists each endpoint with the roles its @PreAuthorize allows")
+    @DisplayName("GET /api/v1/exam/access-rules - lists each endpoint with the roles its @PreAuthorize allows")
     void listsRules() throws Exception {
-        mockMvc.perform(get("/api/v1/exams/access-rules").header("Authorization", bearer("REGISTRAR")))
+        mockMvc.perform(get("/api/v1/exam/access-rules").header("Authorization", bearer("REGISTRAR")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.length()", greaterThan(15)))
                 .andExpect(jsonPath("$.data[?(@.method == 'POST' && @.path == '/api/v1/exams/terms/{examTermId}/publish')].roles[*]",
@@ -47,8 +54,27 @@ class AccessRuleControllerIntegrationTest {
     }
 
     @Test
-    @DisplayName("GET /api/v1/exams/access-rules - 401 without a token")
+    @DisplayName("GET /api/v1/exam/access-rules - 401 without a token")
     void requiresAuthentication() throws Exception {
-        mockMvc.perform(get("/api/v1/exams/access-rules")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/exam/access-rules")).andExpect(status().isUnauthorized());
+    }
+
+    @Autowired
+    @Qualifier("requestMappingHandlerMapping")
+    private RequestMappingHandlerMapping handlerMapping;
+
+    @Test
+    @DisplayName("GET /api/v1/exam/access-rules is answered only by the rules endpoint (no resource path shadows it)")
+    void rulesPathIsNotShadowedByAResource() {
+        PathContainer rules = PathContainer.parsePath("/api/v1/exam/access-rules");
+        List<String> shadows = handlerMapping.getHandlerMethods().entrySet().stream()
+                .filter(e -> e.getKey().getMethodsCondition().getMethods().isEmpty()
+                        || e.getKey().getMethodsCondition().getMethods().contains(RequestMethod.GET))
+                .filter(e -> !e.getValue().getBeanType().equals(AccessRuleController.class))
+                .filter(e -> e.getKey().getPatternValues().stream()
+                        .anyMatch(p -> PathPatternParser.defaultInstance.parse(p).matches(rules)))
+                .map(e -> e.getKey().getPatternValues() + " -> " + e.getValue())
+                .toList();
+        assertThat(shadows, empty());
     }
 }
