@@ -66,7 +66,7 @@ See [`wiki/api-docs/School_ERP_Module_05_Exams_API_Documentation.md`](wiki/api-d
 - [x] Step 7 Postman [`postman/School_ERP_ExamService.postman_collection.json`](postman/School_ERP_ExamService.postman_collection.json): sign-in folder + one folder per story (49 requests), variables validated
 - [x] Step 8 wiki with `{expand}` per story
 - [x] Seed [`module05_exam_seed.sql`](../studentservice/src/main/resources/db/seed/module05_exam_seed.sql) (kept with the Module 03 seed it builds on, in studentservice) (roles, 3 accounts, scale, 4 terms, 220 subjects, 481 marks, ticket, co-scholastic grades, published cards)
-- [x] UI: Vite proxy `/api/v1/exams` → `http://localhost:8086/examservice` (`EXAM_SERVICE_URL`); student profile Academic progress card; Academics page assessments workspace — see [`frontend/docs/examservice-api-mapping.md`](../frontend/docs/examservice-api-mapping.md)
+- [x] UI: Vite proxy `/api/v1/exams` → `http://localhost:8086/examservice` (`EXAM_SERVICE_URL`); student profile Academic progress card; Academics page assessments workspace — see [`school_webapp/docs/examservice-api-mapping.md`](../school_webapp/docs/examservice-api-mapping.md)
 - [x] UI regression cases `scripts/cases/examservice.json` and cleanup
 
 ## 5. Verification
