@@ -1,6 +1,5 @@
 package com.kvs.exam.dto;
 
-import com.kvs.exam.enums.CoScholasticArea;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
@@ -35,8 +34,10 @@ public class SaveCoScholasticRequest {
         @NotNull(message = "studentId is required")
         private UUID studentId;
 
-        @NotNull(message = "area is required")
-        private CoScholasticArea area;
+        /** An area key of the term's template (or a CBSE default area when the term follows no template) */
+        @NotBlank(message = "area is required")
+        @Size(max = 40, message = "area must be at most 40 characters")
+        private String area;
 
         @NotBlank(message = "grade is required")
         @Pattern(regexp = "^(A\\+|A|B|C)$", message = "grade must be A+, A, B or C")

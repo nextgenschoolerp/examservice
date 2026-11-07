@@ -51,6 +51,20 @@ public class ExamController {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success("Grading scale created", setupService.createScale(request)));
     }
 
+    @PutMapping("/terms/{examTermId}/template")
+    @PreAuthorize(ExamRoles.CONFIGURE)
+    public ResponseEntity<ApiResponse<ExamTermResponse>> linkTemplate(@PathVariable("examTermId") java.util.UUID examTermId,
+                                                                      @RequestBody com.kvs.exam.dto.LinkTemplateRequest request) {
+        return ResponseEntity.ok(ApiResponse.success("Template linked", setupService.linkTemplate(examTermId, request.getTemplateId())));
+    }
+
+    @PutMapping("/grading-scales/{gradingScaleId}")
+    @PreAuthorize(ExamRoles.CONFIGURE)
+    public ResponseEntity<ApiResponse<GradingScaleResponse>> updateScale(@PathVariable("gradingScaleId") java.util.UUID gradingScaleId,
+                                                                         @Valid @RequestBody CreateGradingScaleRequest request) {
+        return ResponseEntity.ok(ApiResponse.success("Grading scale saved", setupService.updateScale(gradingScaleId, request)));
+    }
+
     @GetMapping("/grading-scales")
     @PreAuthorize(ExamRoles.VIEW)
     public ResponseEntity<ApiResponse<List<GradingScaleResponse>>> listScales(@RequestParam(value = "tenantId", required = false) String tenantId) {

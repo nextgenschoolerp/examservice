@@ -1,7 +1,6 @@
 package com.kvs.exam.repo;
 
 import com.kvs.exam.entity.CoScholasticGrade;
-import com.kvs.exam.enums.CoScholasticArea;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -15,5 +14,5 @@ public interface CoScholasticGradeRepository extends JpaRepository<CoScholasticG
 
     List<CoScholasticGrade> findByExamTermIdAndStudentIdIn(UUID examTermId, Collection<UUID> studentIds);
 
-    Optional<CoScholasticGrade> findByExamTermIdAndStudentIdAndArea(UUID examTermId, UUID studentId, CoScholasticArea area);
+    Optional<CoScholasticGrade> findByExamTermIdAndStudentIdAndArea(UUID examTermId, UUID studentId, String area);
 }

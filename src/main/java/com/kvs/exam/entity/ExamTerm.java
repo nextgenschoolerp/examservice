@@ -65,6 +65,13 @@ public class ExamTerm extends BaseAuditEntity {
     @Column(name = "grading_scale_id", nullable = false)
     private UUID gradingScaleId;
 
+    /**
+     * The assessment template the term follows: its co-scholastic areas and progress-card layout. Null for a term set up before
+     * templates existed, which keeps the CBSE areas and the grades layout.
+     */
+    @Column(name = "template_id")
+    private UUID templateId;
+
     /** Locked when locked by hand or once the deadline has passed. */
     public boolean isLocked(Instant now) {
         return lockedAt != null || now.isAfter(markEntryDeadline);

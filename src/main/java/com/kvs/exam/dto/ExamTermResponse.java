@@ -31,5 +31,8 @@ public class ExamTermResponse {
     private Instant lockedAt;
     private UUID gradingScaleId;
     private String gradingScaleName;
+    /** The assessment template the term follows; null for a term set up without one */
+    private UUID templateId;
+    private String templateName;
     private int subjectCount;
 }

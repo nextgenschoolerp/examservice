@@ -13,6 +13,7 @@ import com.kvs.exam.dto.PublishResultsResponse;
 import com.kvs.exam.dto.RankListResponse;
 import com.kvs.exam.dto.SaveCoScholasticRequest;
 import com.kvs.exam.entity.AcademicSession;
+import com.kvs.exam.entity.AssessmentTemplate;
 import com.kvs.exam.entity.CoScholasticGrade;
 import com.kvs.exam.entity.ExamSubject;
 import com.kvs.exam.entity.ExamTerm;
@@ -74,6 +75,8 @@ public class ExamResultService {
     @Autowired private MarkEntryRepository markRepository;
     @Autowired private GradingScaleRepository scaleRepository;
     @Autowired private CoScholasticGradeRepository coScholasticRepository;
+    @Autowired private CoScholasticAreas coAreas;
+    @Autowired private com.kvs.exam.repo.AssessmentTemplateRepository templateRepository;
     @Autowired private ProgressCardRepository cardRepository;
     @Autowired private SectionRepository sectionRepository;
     @Autowired private GradeRepository gradeRepository;
@@ -295,9 +298,15 @@ public class ExamResultService {
     public CoScholasticResponse saveCoScholastic(UUID examTermId, SaveCoScholasticRequest request) {
         ExamTerm term = access.term(examTermId);
         String user = access.currentUser();
+        Map<String, String> allowed = coAreas.forTerm(term);
         Set<String> seen = new HashSet<>();
         Set<UUID> studentIds = new HashSet<>();
         for (SaveCoScholasticRequest.Entry e : request.getEntries()) {
+            e.setArea(e.getArea().trim().toUpperCase());
+            if (!allowed.containsKey(e.getArea())) {
+                throw new BadRequestException(e.getArea() + " is not a co-scholastic area of " + term.getTermName()
+                        + (allowed.isEmpty() ? ": its template grades none" : ". Choose one of " + String.join(", ", allowed.keySet())));
+            }
             if (!seen.add(e.getStudentId() + "|" + e.getArea())) {
                 throw new BadRequestException(e.getArea() + " appears twice for student " + e.getStudentId());
             }
@@ -329,17 +338,22 @@ public class ExamResultService {
         Map<UUID, List<CoScholasticGrade>> grades = coScholasticRepository
                 .findByExamTermIdAndStudentIdIn(term.getExamTermId(), students.stream().map(StudentMaster::getStudentId).toList())
                 .stream().collect(Collectors.groupingBy(CoScholasticGrade::getStudentId));
+        Map<String, String> areas = coAreas.forTerm(term);
         return CoScholasticResponse.builder()
-                .examTermId(term.getExamTermId()).termName(term.getTermName())
+                .examTermId(term.getExamTermId()).termName(term.getTermName()).areas(coAreas.asList(areas))
                 .rows(students.stream().map(s -> CoScholasticResponse.Row.builder()
                         .studentId(s.getStudentId()).studentUid(s.getStudentUid()).studentName(ExamAccess.fullName(s))
-                        .grades(areaGrades(grades.getOrDefault(s.getStudentId(), List.of()))).build()).toList())
+                        .grades(areaGrades(areas, grades.getOrDefault(s.getStudentId(), List.of()))).build()).toList())
                 .build();
     }
 
-    private static List<CoScholasticResponse.AreaGrade> areaGrades(List<CoScholasticGrade> grades) {
-        return grades.stream().sorted(Comparator.comparing(CoScholasticGrade::getArea))
-                .map(g -> CoScholasticResponse.AreaGrade.builder().area(g.getArea()).grade(g.getGrade()).remarks(g.getRemarks()).build())
+    /** The grades in the term's area order, each with the area's name from the term's template */
+    private static List<CoScholasticResponse.AreaGrade> areaGrades(Map<String, String> areas, List<CoScholasticGrade> grades) {
+        List<String> order = new ArrayList<>(areas.keySet());
+        return grades.stream().sorted(Comparator.comparingInt((CoScholasticGrade g) -> order.indexOf(g.getArea()) < 0 ? Integer.MAX_VALUE : order.indexOf(g.getArea()))
+                        .thenComparing(CoScholasticGrade::getArea))
+                .map(g -> CoScholasticResponse.AreaGrade.builder().area(g.getArea()).areaLabel(CoScholasticAreas.label(areas, g.getArea()))
+                        .grade(g.getGrade()).remarks(g.getRemarks()).build())
                 .toList();
     }
 
@@ -420,11 +434,15 @@ public class ExamResultService {
         List<StudentResult> results = sectionResults(term, section, s.getBranchId(), ranks);
         StudentResult r = results.stream().filter(x -> x.student().getStudentId().equals(studentId)).findFirst()
                 .orElseGet(() -> results(term, section.getGradeId(), List.of(s), null).get(0));
+        AssessmentTemplate template = term.getTemplateId() == null ? null : templateRepository.findById(term.getTemplateId()).orElse(null);
         return ProgressCardResponse.builder()
                 .studentId(studentId).studentUid(s.getStudentUid()).studentName(ExamAccess.fullName(s))
                 .className(access.className(section)).rollNumber(s.getRollNumber())
                 .examTermId(examTermId).termName(term.getTermName()).termType(term.getTermType())
                 .academicYear(sessionRepository.findById(term.getAcademicYearId()).map(AcademicSession::getSessionName).orElse(null))
+                .templateName(template == null ? null : template.getTemplateName())
+                .reportLayout(template == null || template.getReportLayout() == null ? "CBSE_GRADES" : template.getReportLayout())
+                .passPercent(scale(term).getPassPercent())
                 .scholastic(r.scores().stream().map(sc -> ProgressCardResponse.SubjectResult.builder()
                         .subjectCode(sc.subject().getSubjectCode()).subjectName(sc.subject().getSubjectName())
                         .maxMarks(sc.subject().getMaxMarks()).entered(sc.entry() != null)
@@ -434,7 +452,7 @@ public class ExamResultService {
                 .totalObtained(r.totalObtained()).totalMax(r.totalMax()).percentage(r.percentage())
                 .grade(r.gradeLabel()).gradePoint(r.band() == null ? null : r.band().getGradePoint()).result(r.result())
                 .sectionRank(ranks.get(studentId)).sectionSize(ranks.size())
-                .coScholastic(areaGrades(coScholasticRepository.findByExamTermIdAndStudentIdIn(examTermId, List.of(studentId))))
+                .coScholastic(areaGrades(coAreas.forTerm(term), coScholasticRepository.findByExamTermIdAndStudentIdIn(examTermId, List.of(studentId))))
                 .teacherRemarks(card == null ? null : card.getTeacherRemarks()).remarksBy(card == null ? null : card.getRemarksBy())
                 .published(card != null && card.getPublished()).publishedAt(card == null ? null : card.getPublishedAt())
                 .build();
