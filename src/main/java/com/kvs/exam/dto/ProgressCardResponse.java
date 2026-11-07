@@ -27,6 +27,11 @@ public class ProgressCardResponse {
     private String termName;
     private ExamTermType termType;
     private String academicYear;
+    /** The assessment template the term follows; null when it follows none */
+    private String templateName;
+    /** How the card shows results: CBSE_GRADES (default), CISCE_MARKS or STATE_PERCENT */
+    private String reportLayout;
+    private BigDecimal passPercent;
     private List<SubjectResult> scholastic;
     private BigDecimal totalObtained;
     private BigDecimal totalMax;

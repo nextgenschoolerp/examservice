@@ -1,6 +1,5 @@
 package com.kvs.exam.entity;
 
-import com.kvs.exam.enums.CoScholasticArea;
 import com.kvs.core.entity.BaseAuditEntity;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
@@ -34,9 +33,9 @@ public class CoScholasticGrade extends BaseAuditEntity {
     @Column(name = "student_id", nullable = false)
     private UUID studentId;
 
-    @Enumerated(EnumType.STRING)
+    /** The area's key (ART_EDUCATION, ...): one of the term's template areas, or the CBSE defaults when the term has no template */
     @Column(name = "area", nullable = false, length = 40)
-    private CoScholasticArea area;
+    private String area;
 
     /** A+, A, B or C */
     @Column(name = "grade", nullable = false, length = 2)

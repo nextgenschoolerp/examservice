@@ -1,0 +1,125 @@
+{
+  "_about": "Master data: assessment templates per board (terms with weightage, grading scale, pass mark, co-scholastic areas, report-card layout). Loaded into assessment_templates at startup (missing codes only). The same rows are written into database/insert.sql by database/generate-templates-sql.mjs. A school copies a template to edit it and applies it to create its grading scale and exam terms. boardCode STATE means every state board. needsReview=true: a starting point to check against the board's own handbook before use.",
+  "templates": [
+    {
+      "code": "CBSE_STANDARD",
+      "boardCode": "CBSE",
+      "name": "CBSE standard",
+      "description": "Two periodic tests and two summative terms, CBSE 9-point grades, pass 33%. Matches the demo school's current setup.",
+      "passPercent": 33,
+      "needsReview": false,
+      "reportLayout": "CBSE_GRADES",
+      "terms": [
+        { "name": "Periodic Test 1", "type": "FORMATIVE", "weightage": 20 },
+        { "name": "Half-Yearly", "type": "SUMMATIVE", "weightage": 30 },
+        { "name": "Periodic Test 2", "type": "FORMATIVE", "weightage": 20 },
+        { "name": "Annual", "type": "SUMMATIVE", "weightage": 30 }
+      ],
+      "areas": [
+        { "key": "ART_EDUCATION", "label": "Art education" },
+        { "key": "HEALTH_AND_PHYSICAL_EDUCATION", "label": "Health & physical education" },
+        { "key": "WORK_EDUCATION", "label": "Work education" },
+        { "key": "VALUE_EDUCATION", "label": "Value education" },
+        { "key": "DISCIPLINE", "label": "Discipline" }
+      ],
+      "bands": [
+        { "label": "A1", "min": 91, "point": 10.0, "description": "Outstanding" },
+        { "label": "A2", "min": 81, "point": 9.0, "description": "Excellent" },
+        { "label": "B1", "min": 71, "point": 8.0, "description": "Very good" },
+        { "label": "B2", "min": 61, "point": 7.0, "description": "Good" },
+        { "label": "C1", "min": 51, "point": 6.0, "description": "Above average" },
+        { "label": "C2", "min": 41, "point": 5.0, "description": "Average" },
+        { "label": "D", "min": 33, "point": 4.0, "description": "Pass" },
+        { "label": "E", "min": 0, "point": 0.0, "description": "Needs improvement" }
+      ]
+    },
+    {
+      "code": "ICSE_STANDARD",
+      "boardCode": "ICSE",
+      "name": "ICSE standard",
+      "description": "Internal assessment and external terms with percentage-based grades. A starting point: check the weightage and grades against the CISCE handbook.",
+      "passPercent": 33,
+      "needsReview": true,
+      "reportLayout": "CISCE_MARKS",
+      "terms": [
+        { "name": "Internal Assessment 1", "type": "FORMATIVE", "weightage": 10 },
+        { "name": "Semester 1", "type": "SUMMATIVE", "weightage": 40 },
+        { "name": "Internal Assessment 2", "type": "FORMATIVE", "weightage": 10 },
+        { "name": "Semester 2", "type": "SUMMATIVE", "weightage": 40 }
+      ],
+      "areas": [
+        { "key": "ART_EDUCATION", "label": "Art education" },
+        { "key": "HEALTH_AND_PHYSICAL_EDUCATION", "label": "Physical education" },
+        { "key": "VALUE_EDUCATION", "label": "Moral & value education" },
+        { "key": "DISCIPLINE", "label": "Conduct & discipline" }
+      ],
+      "bands": [
+        { "label": "A+", "min": 90, "point": 10.0, "description": "Outstanding" },
+        { "label": "A", "min": 80, "point": 9.0, "description": "Excellent" },
+        { "label": "B+", "min": 70, "point": 8.0, "description": "Very good" },
+        { "label": "B", "min": 60, "point": 7.0, "description": "Good" },
+        { "label": "C", "min": 50, "point": 6.0, "description": "Satisfactory" },
+        { "label": "D", "min": 33, "point": 4.0, "description": "Pass" },
+        { "label": "E", "min": 0, "point": 0.0, "description": "Needs improvement" }
+      ]
+    },
+    {
+      "code": "ISC_STANDARD",
+      "boardCode": "ISC",
+      "name": "ISC standard",
+      "description": "Internal assessment and external terms for Classes 11 and 12. A starting point: check the weightage and grades against the CISCE handbook.",
+      "passPercent": 35,
+      "needsReview": true,
+      "reportLayout": "CISCE_MARKS",
+      "terms": [
+        { "name": "Internal Assessment 1", "type": "FORMATIVE", "weightage": 10 },
+        { "name": "Semester 1", "type": "SUMMATIVE", "weightage": 40 },
+        { "name": "Internal Assessment 2", "type": "FORMATIVE", "weightage": 10 },
+        { "name": "Semester 2", "type": "SUMMATIVE", "weightage": 40 }
+      ],
+      "areas": [
+        { "key": "HEALTH_AND_PHYSICAL_EDUCATION", "label": "Physical education" },
+        { "key": "DISCIPLINE", "label": "Conduct & discipline" }
+      ],
+      "bands": [
+        { "label": "A+", "min": 90, "point": 10.0, "description": "Outstanding" },
+        { "label": "A", "min": 80, "point": 9.0, "description": "Excellent" },
+        { "label": "B+", "min": 70, "point": 8.0, "description": "Very good" },
+        { "label": "B", "min": 60, "point": 7.0, "description": "Good" },
+        { "label": "C", "min": 50, "point": 6.0, "description": "Satisfactory" },
+        { "label": "D", "min": 35, "point": 4.0, "description": "Pass" },
+        { "label": "E", "min": 0, "point": 0.0, "description": "Needs improvement" }
+      ]
+    },
+    {
+      "code": "STATE_STANDARD",
+      "boardCode": "STATE",
+      "name": "State board standard",
+      "description": "Unit tests and two terms with percentage grades, pass 35%. State boards differ, so edit a copy to match your board's pattern.",
+      "passPercent": 35,
+      "needsReview": true,
+      "reportLayout": "STATE_PERCENT",
+      "terms": [
+        { "name": "Unit Test 1", "type": "FORMATIVE", "weightage": 10 },
+        { "name": "Term 1", "type": "SUMMATIVE", "weightage": 40 },
+        { "name": "Unit Test 2", "type": "FORMATIVE", "weightage": 10 },
+        { "name": "Term 2", "type": "SUMMATIVE", "weightage": 40 }
+      ],
+      "areas": [
+        { "key": "ART_EDUCATION", "label": "Art education" },
+        { "key": "HEALTH_AND_PHYSICAL_EDUCATION", "label": "Physical education" },
+        { "key": "WORK_EDUCATION", "label": "Work experience" },
+        { "key": "VALUE_EDUCATION", "label": "Value education" },
+        { "key": "DISCIPLINE", "label": "Discipline" }
+      ],
+      "bands": [
+        { "label": "A+", "min": 90, "point": 10.0, "description": "Outstanding" },
+        { "label": "A", "min": 75, "point": 9.0, "description": "Excellent" },
+        { "label": "B+", "min": 60, "point": 8.0, "description": "Very good" },
+        { "label": "B", "min": 50, "point": 7.0, "description": "Good" },
+        { "label": "C", "min": 35, "point": 5.0, "description": "Pass" },
+        { "label": "D", "min": 0, "point": 0.0, "description": "Needs improvement" }
+      ]
+    }
+  ]
+}
