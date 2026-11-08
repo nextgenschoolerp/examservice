@@ -1,5 +1,6 @@
 package com.kvs.exam.config;
 
+import com.kvs.core.tenancy.TenantJobs;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
@@ -16,17 +17,23 @@ import org.springframework.stereotype.Component;
 public class ExamSchemaUpgrade implements ApplicationRunner {
 
     private final JdbcTemplate jdbc;
+    private final TenantJobs tenantJobs;
 
-    public ExamSchemaUpgrade(JdbcTemplate jdbc) {
+    public ExamSchemaUpgrade(JdbcTemplate jdbc, TenantJobs tenantJobs) {
         this.jdbc = jdbc;
+        this.tenantJobs = tenantJobs;
     }
 
+    /** co_scholastic_grades is school data: runs in each school's schema (once, for all, when schema routing is off). */
     @Override
     public void run(ApplicationArguments args) {
-        try {
-            jdbc.execute("ALTER TABLE IF EXISTS co_scholastic_grades DROP CONSTRAINT IF EXISTS co_scholastic_grades_area_check");
-        } catch (Exception e) {
-            log.warn("Could not drop the co_scholastic_grades area check constraint: {}", e.getMessage());
-        }
+        tenantJobs.forEachSchool("co_scholastic_grades constraint upgrade", tenantId -> {
+            try {
+                jdbc.execute("ALTER TABLE IF EXISTS co_scholastic_grades DROP CONSTRAINT IF EXISTS co_scholastic_grades_area_check");
+            } catch (Exception e) {
+                log.warn("Could not drop the co_scholastic_grades area check constraint{}: {}",
+                        tenantId == null ? "" : " (school " + tenantId + ")", e.getMessage());
+            }
+        });
     }
 }
