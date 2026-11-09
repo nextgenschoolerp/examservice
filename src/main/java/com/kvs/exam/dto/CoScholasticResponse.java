@@ -1,6 +1,5 @@
 package com.kvs.exam.dto;
 
-import com.kvs.exam.enums.CoScholasticArea;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -18,6 +17,8 @@ public class CoScholasticResponse {
 
     private UUID examTermId;
     private String termName;
+    /** The areas graded for this term: its template's, or the CBSE defaults when the term follows no template */
+    private List<AreaGrade> areas;
     private List<Row> rows;
 
     @Data
@@ -35,7 +36,10 @@ public class CoScholasticResponse {
     @NoArgsConstructor
     @AllArgsConstructor
     public static class AreaGrade {
-        private CoScholasticArea area;
+        /** The area's key */
+        private String area;
+        /** The area's name on the progress card (from the term's template) */
+        private String areaLabel;
         private String grade;
         private String remarks;
     }

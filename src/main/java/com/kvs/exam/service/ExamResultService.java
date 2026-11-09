@@ -13,6 +13,7 @@ import com.kvs.exam.dto.PublishResultsResponse;
 import com.kvs.exam.dto.RankListResponse;
 import com.kvs.exam.dto.SaveCoScholasticRequest;
 import com.kvs.exam.entity.AcademicSession;
+import com.kvs.exam.entity.AssessmentTemplate;
 import com.kvs.exam.entity.CoScholasticGrade;
 import com.kvs.exam.entity.ExamSubject;
 import com.kvs.exam.entity.ExamTerm;
@@ -74,6 +75,8 @@ public class ExamResultService {
     @Autowired private MarkEntryRepository markRepository;
     @Autowired private GradingScaleRepository scaleRepository;
     @Autowired private CoScholasticGradeRepository coScholasticRepository;
+    @Autowired private CoScholasticAreas coAreas;
+    @Autowired private com.kvs.exam.repo.AssessmentTemplateRepository templateRepository;
     @Autowired private ProgressCardRepository cardRepository;
     @Autowired private SectionRepository sectionRepository;
     @Autowired private GradeRepository gradeRepository;
@@ -180,7 +183,8 @@ public class ExamResultService {
     @Transactional(readOnly = true)
     public BroadsheetResponse broadsheet(UUID examTermId, UUID sectionId, String branchId) {
         ExamTerm term = access.term(examTermId);
-        Section section = access.section(sectionId, term.getTenantId());
+        Section section = access.section(sectionId, term.getTenantId(), ExamAccess.VIEW_TERMS);
+        branchId = access.campus(ExamAccess.VIEW_TERMS, branchId);
         Map<UUID, Integer> ranks = new LinkedHashMap<>();
         List<StudentResult> results = sectionResults(term, section, branchId, ranks);
         List<ExamSubject> subjects = subjectRepository.findByExamTermIdAndGradeIdOrderByDisplayOrderAsc(examTermId, section.getGradeId());
@@ -226,8 +230,8 @@ public class ExamResultService {
         ExamTerm term = access.term(examTermId);
         List<BroadsheetResponse> sheets = new ArrayList<>();
         for (com.kvs.exam.entity.Grade grade : gradeRepository.findByTenantIdOrderBySequenceOrderAsc(term.getTenantId())) {
-            for (Section section : sectionRepository.findByGradeId(grade.getGradeId())) {
-                if (!access.roster(section, term, branchId).isEmpty()) {
+            for (Section section : access.reachable(sectionRepository.findByGradeId(grade.getGradeId()), ExamAccess.VIEW_TERMS)) {
+                if (!access.roster(section, term, access.campus(ExamAccess.VIEW_TERMS, branchId)).isEmpty()) {
                     sheets.add(broadsheet(examTermId, section.getSectionId(), branchId));
                 }
             }
@@ -243,8 +247,9 @@ public class ExamResultService {
         if ((gradeId == null) == (sectionId == null)) {
             throw new BadRequestException("Give either gradeId (whole class) or sectionId");
         }
-        List<Section> sections = sectionId != null ? List.of(access.section(sectionId, term.getTenantId()))
-                : sectionRepository.findByGradeId(access.grade(gradeId, term.getTenantId()).getGradeId());
+        List<Section> sections = sectionId != null ? List.of(access.section(sectionId, term.getTenantId(), ExamAccess.VIEW_TERMS))
+                : access.reachable(sectionRepository.findByGradeId(access.grade(gradeId, term.getTenantId()).getGradeId()), ExamAccess.VIEW_TERMS);
+        branchId = access.campus(ExamAccess.VIEW_TERMS, branchId);
         UUID grade = sections.isEmpty() ? gradeId : sections.get(0).getGradeId();
         Map<UUID, String> classOf = new LinkedHashMap<>();
         List<StudentMaster> students = new ArrayList<>();
@@ -295,13 +300,19 @@ public class ExamResultService {
     public CoScholasticResponse saveCoScholastic(UUID examTermId, SaveCoScholasticRequest request) {
         ExamTerm term = access.term(examTermId);
         String user = access.currentUser();
+        Map<String, String> allowed = coAreas.forTerm(term);
         Set<String> seen = new HashSet<>();
         Set<UUID> studentIds = new HashSet<>();
         for (SaveCoScholasticRequest.Entry e : request.getEntries()) {
+            e.setArea(e.getArea().trim().toUpperCase());
+            if (!allowed.containsKey(e.getArea())) {
+                throw new BadRequestException(e.getArea() + " is not a co-scholastic area of " + term.getTermName()
+                        + (allowed.isEmpty() ? ": its template grades none" : ". Choose one of " + String.join(", ", allowed.keySet())));
+            }
             if (!seen.add(e.getStudentId() + "|" + e.getArea())) {
                 throw new BadRequestException(e.getArea() + " appears twice for student " + e.getStudentId());
             }
-            StudentMaster s = access.student(e.getStudentId());
+            StudentMaster s = access.student(e.getStudentId(), ExamAccess.ENTER_MARKS);
             if (!s.getTenantId().equals(term.getTenantId())) {
                 throw new ResourceNotFoundException("StudentMaster", "studentId", e.getStudentId());
             }
@@ -321,32 +332,37 @@ public class ExamResultService {
     @Transactional(readOnly = true)
     public CoScholasticResponse coScholastic(UUID examTermId, UUID sectionId, String branchId) {
         ExamTerm term = access.term(examTermId);
-        Section section = access.section(sectionId, term.getTenantId());
-        return coScholastic(term, access.roster(section, term, branchId));
+        Section section = access.section(sectionId, term.getTenantId(), ExamAccess.VIEW_TERMS);
+        return coScholastic(term, access.roster(section, term, access.campus(ExamAccess.VIEW_TERMS, branchId)));
     }
 
     private CoScholasticResponse coScholastic(ExamTerm term, List<StudentMaster> students) {
         Map<UUID, List<CoScholasticGrade>> grades = coScholasticRepository
                 .findByExamTermIdAndStudentIdIn(term.getExamTermId(), students.stream().map(StudentMaster::getStudentId).toList())
                 .stream().collect(Collectors.groupingBy(CoScholasticGrade::getStudentId));
+        Map<String, String> areas = coAreas.forTerm(term);
         return CoScholasticResponse.builder()
-                .examTermId(term.getExamTermId()).termName(term.getTermName())
+                .examTermId(term.getExamTermId()).termName(term.getTermName()).areas(coAreas.asList(areas))
                 .rows(students.stream().map(s -> CoScholasticResponse.Row.builder()
                         .studentId(s.getStudentId()).studentUid(s.getStudentUid()).studentName(ExamAccess.fullName(s))
-                        .grades(areaGrades(grades.getOrDefault(s.getStudentId(), List.of()))).build()).toList())
+                        .grades(areaGrades(areas, grades.getOrDefault(s.getStudentId(), List.of()))).build()).toList())
                 .build();
     }
 
-    private static List<CoScholasticResponse.AreaGrade> areaGrades(List<CoScholasticGrade> grades) {
-        return grades.stream().sorted(Comparator.comparing(CoScholasticGrade::getArea))
-                .map(g -> CoScholasticResponse.AreaGrade.builder().area(g.getArea()).grade(g.getGrade()).remarks(g.getRemarks()).build())
+    /** The grades in the term's area order, each with the area's name from the term's template */
+    private static List<CoScholasticResponse.AreaGrade> areaGrades(Map<String, String> areas, List<CoScholasticGrade> grades) {
+        List<String> order = new ArrayList<>(areas.keySet());
+        return grades.stream().sorted(Comparator.comparingInt((CoScholasticGrade g) -> order.indexOf(g.getArea()) < 0 ? Integer.MAX_VALUE : order.indexOf(g.getArea()))
+                        .thenComparing(CoScholasticGrade::getArea))
+                .map(g -> CoScholasticResponse.AreaGrade.builder().area(g.getArea()).areaLabel(CoScholasticAreas.label(areas, g.getArea()))
+                        .grade(g.getGrade()).remarks(g.getRemarks()).build())
                 .toList();
     }
 
     // ------------------------------------------------------------------ US-05018 remarks, US-05010 publish
 
     public ProgressCardResponse saveRemarks(UUID studentId, ProgressRemarksRequest request) {
-        StudentMaster s = access.student(studentId);
+        StudentMaster s = access.student(studentId, ExamAccess.WRITE_REMARKS);
         ExamTerm term = access.term(request.getExamTermId());
         ProgressCard card = cardRepository.findByExamTermIdAndStudentId(term.getExamTermId(), studentId)
                 .orElseGet(() -> ProgressCard.builder().examTermId(term.getExamTermId()).studentId(studentId).build());
@@ -363,7 +379,8 @@ public class ExamResultService {
     /** Publishes the section's progress cards to parents; refused while any mark entry is missing (US-05016). */
     public PublishResultsResponse publish(UUID examTermId, UUID sectionId, String branchId) {
         ExamTerm term = access.term(examTermId);
-        Section section = access.section(sectionId, term.getTenantId());
+        Section section = access.section(sectionId, term.getTenantId(), ExamAccess.PUBLISH);
+        branchId = access.campus(ExamAccess.PUBLISH, branchId);
         MarkCompletenessResponse check = markEntryService.completeness(examTermId, sectionId, null, branchId);
         if (check.getExpectedEntries() == 0) {
             throw new ConflictException(access.className(section) + " has no students or subjects for " + term.getTermName());
@@ -420,11 +437,15 @@ public class ExamResultService {
         List<StudentResult> results = sectionResults(term, section, s.getBranchId(), ranks);
         StudentResult r = results.stream().filter(x -> x.student().getStudentId().equals(studentId)).findFirst()
                 .orElseGet(() -> results(term, section.getGradeId(), List.of(s), null).get(0));
+        AssessmentTemplate template = term.getTemplateId() == null ? null : templateRepository.findById(term.getTemplateId()).orElse(null);
         return ProgressCardResponse.builder()
                 .studentId(studentId).studentUid(s.getStudentUid()).studentName(ExamAccess.fullName(s))
                 .className(access.className(section)).rollNumber(s.getRollNumber())
                 .examTermId(examTermId).termName(term.getTermName()).termType(term.getTermType())
                 .academicYear(sessionRepository.findById(term.getAcademicYearId()).map(AcademicSession::getSessionName).orElse(null))
+                .templateName(template == null ? null : template.getTemplateName())
+                .reportLayout(template == null || template.getReportLayout() == null ? "CBSE_GRADES" : template.getReportLayout())
+                .passPercent(scale(term).getPassPercent())
                 .scholastic(r.scores().stream().map(sc -> ProgressCardResponse.SubjectResult.builder()
                         .subjectCode(sc.subject().getSubjectCode()).subjectName(sc.subject().getSubjectName())
                         .maxMarks(sc.subject().getMaxMarks()).entered(sc.entry() != null)
@@ -434,7 +455,7 @@ public class ExamResultService {
                 .totalObtained(r.totalObtained()).totalMax(r.totalMax()).percentage(r.percentage())
                 .grade(r.gradeLabel()).gradePoint(r.band() == null ? null : r.band().getGradePoint()).result(r.result())
                 .sectionRank(ranks.get(studentId)).sectionSize(ranks.size())
-                .coScholastic(areaGrades(coScholasticRepository.findByExamTermIdAndStudentIdIn(examTermId, List.of(studentId))))
+                .coScholastic(areaGrades(coAreas.forTerm(term), coScholasticRepository.findByExamTermIdAndStudentIdIn(examTermId, List.of(studentId))))
                 .teacherRemarks(card == null ? null : card.getTeacherRemarks()).remarksBy(card == null ? null : card.getRemarksBy())
                 .published(card != null && card.getPublished()).publishedAt(card == null ? null : card.getPublishedAt())
                 .build();

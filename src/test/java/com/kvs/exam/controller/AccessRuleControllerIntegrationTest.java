@@ -1,5 +1,6 @@
 package com.kvs.exam.controller;
 
+import com.kvs.core.rbac.AccessRuleController;
 import com.kvs.core.service.JwtTokenService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

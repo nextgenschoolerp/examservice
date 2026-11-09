@@ -1,0 +1,380 @@
+{
+ "service": "exam",
+ "capturedAt": "2026-11-08",
+ "source": "GET access-rules via dev app (SUPER_ADMIN session)",
+ "rules": [
+  {
+   "method": "GET",
+   "path": "/api/v1/exam/access-rules",
+   "roles": []
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/exams/grading-scales",
+   "roles": [
+    "ACADEMIC_AUDITOR",
+    "CLASS_TEACHER",
+    "EXAM_CONTROLLER",
+    "REGISTRAR",
+    "SCHOOL_PRINCIPAL",
+    "SUBJECT_TEACHER",
+    "SUPER_ADMIN",
+    "VICE_PRINCIPAL"
+   ]
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/exams/grading-scales",
+   "roles": [
+    "EXAM_CONTROLLER",
+    "SCHOOL_PRINCIPAL",
+    "SUPER_ADMIN"
+   ]
+  },
+  {
+   "method": "PUT",
+   "path": "/api/v1/exams/grading-scales/{gradingScaleId}",
+   "roles": [
+    "EXAM_CONTROLLER",
+    "SCHOOL_PRINCIPAL",
+    "SUPER_ADMIN"
+   ]
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/exams/students/{studentId}/progress-card",
+   "roles": [
+    "ACADEMIC_AUDITOR",
+    "APPLICANT_PARENT",
+    "CLASS_TEACHER",
+    "EXAM_CONTROLLER",
+    "REGISTRAR",
+    "SCHOOL_PRINCIPAL",
+    "SUBJECT_TEACHER",
+    "SUPER_ADMIN",
+    "VICE_PRINCIPAL"
+   ]
+  },
+  {
+   "method": "PUT",
+   "path": "/api/v1/exams/students/{studentId}/progress-card/remarks",
+   "roles": [
+    "CLASS_TEACHER",
+    "SCHOOL_PRINCIPAL",
+    "SUPER_ADMIN"
+   ]
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/exams/students/{studentId}/progress-trend",
+   "roles": [
+    "ACADEMIC_AUDITOR",
+    "APPLICANT_PARENT",
+    "CLASS_TEACHER",
+    "EXAM_CONTROLLER",
+    "REGISTRAR",
+    "SCHOOL_PRINCIPAL",
+    "SUBJECT_TEACHER",
+    "SUPER_ADMIN",
+    "VICE_PRINCIPAL"
+   ]
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/exams/templates",
+   "roles": [
+    "ACADEMIC_AUDITOR",
+    "CLASS_TEACHER",
+    "EXAM_CONTROLLER",
+    "REGISTRAR",
+    "SCHOOL_PRINCIPAL",
+    "SUBJECT_TEACHER",
+    "SUPER_ADMIN",
+    "VICE_PRINCIPAL"
+   ]
+  },
+  {
+   "method": "DELETE",
+   "path": "/api/v1/exams/templates/{templateId}",
+   "roles": [
+    "EXAM_CONTROLLER",
+    "SCHOOL_PRINCIPAL",
+    "SUPER_ADMIN"
+   ]
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/exams/templates/{templateId}",
+   "roles": [
+    "ACADEMIC_AUDITOR",
+    "CLASS_TEACHER",
+    "EXAM_CONTROLLER",
+    "REGISTRAR",
+    "SCHOOL_PRINCIPAL",
+    "SUBJECT_TEACHER",
+    "SUPER_ADMIN",
+    "VICE_PRINCIPAL"
+   ]
+  },
+  {
+   "method": "PUT",
+   "path": "/api/v1/exams/templates/{templateId}",
+   "roles": [
+    "EXAM_CONTROLLER",
+    "SCHOOL_PRINCIPAL",
+    "SUPER_ADMIN"
+   ]
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/exams/templates/{templateId}/apply",
+   "roles": [
+    "EXAM_CONTROLLER",
+    "SCHOOL_PRINCIPAL",
+    "SUPER_ADMIN"
+   ]
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/exams/templates/{templateId}/copy",
+   "roles": [
+    "EXAM_CONTROLLER",
+    "SCHOOL_PRINCIPAL",
+    "SUPER_ADMIN"
+   ]
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/exams/terms",
+   "roles": [
+    "ACADEMIC_AUDITOR",
+    "APPLICANT_PARENT",
+    "CLASS_TEACHER",
+    "EXAM_CONTROLLER",
+    "REGISTRAR",
+    "SCHOOL_PRINCIPAL",
+    "SUBJECT_TEACHER",
+    "SUPER_ADMIN",
+    "VICE_PRINCIPAL"
+   ]
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/exams/terms",
+   "roles": [
+    "EXAM_CONTROLLER",
+    "SCHOOL_PRINCIPAL",
+    "SUPER_ADMIN"
+   ]
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/exams/terms/{examTermId}",
+   "roles": [
+    "ACADEMIC_AUDITOR",
+    "APPLICANT_PARENT",
+    "CLASS_TEACHER",
+    "EXAM_CONTROLLER",
+    "REGISTRAR",
+    "SCHOOL_PRINCIPAL",
+    "SUBJECT_TEACHER",
+    "SUPER_ADMIN",
+    "VICE_PRINCIPAL"
+   ]
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/exams/terms/{examTermId}/broadsheet",
+   "roles": [
+    "ACADEMIC_AUDITOR",
+    "CLASS_TEACHER",
+    "EXAM_CONTROLLER",
+    "REGISTRAR",
+    "SCHOOL_PRINCIPAL",
+    "SUBJECT_TEACHER",
+    "SUPER_ADMIN",
+    "VICE_PRINCIPAL"
+   ]
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/exams/terms/{examTermId}/co-scholastic",
+   "roles": [
+    "ACADEMIC_AUDITOR",
+    "CLASS_TEACHER",
+    "EXAM_CONTROLLER",
+    "REGISTRAR",
+    "SCHOOL_PRINCIPAL",
+    "SUBJECT_TEACHER",
+    "SUPER_ADMIN",
+    "VICE_PRINCIPAL"
+   ]
+  },
+  {
+   "method": "PUT",
+   "path": "/api/v1/exams/terms/{examTermId}/co-scholastic",
+   "roles": [
+    "CLASS_TEACHER",
+    "EXAM_CONTROLLER",
+    "SUBJECT_TEACHER",
+    "SUPER_ADMIN"
+   ]
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/exams/terms/{examTermId}/completeness",
+   "roles": [
+    "ACADEMIC_AUDITOR",
+    "CLASS_TEACHER",
+    "EXAM_CONTROLLER",
+    "REGISTRAR",
+    "SCHOOL_PRINCIPAL",
+    "SUBJECT_TEACHER",
+    "SUPER_ADMIN",
+    "VICE_PRINCIPAL"
+   ]
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/exams/terms/{examTermId}/lock",
+   "roles": [
+    "EXAM_CONTROLLER",
+    "SCHOOL_PRINCIPAL",
+    "SUPER_ADMIN"
+   ]
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/exams/terms/{examTermId}/mark-changes",
+   "roles": [
+    "ACADEMIC_AUDITOR",
+    "EXAM_CONTROLLER",
+    "SCHOOL_PRINCIPAL",
+    "SUPER_ADMIN"
+   ]
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/exams/terms/{examTermId}/marks",
+   "roles": [
+    "ACADEMIC_AUDITOR",
+    "CLASS_TEACHER",
+    "EXAM_CONTROLLER",
+    "REGISTRAR",
+    "SCHOOL_PRINCIPAL",
+    "SUBJECT_TEACHER",
+    "SUPER_ADMIN",
+    "VICE_PRINCIPAL"
+   ]
+  },
+  {
+   "method": "PUT",
+   "path": "/api/v1/exams/terms/{examTermId}/marks",
+   "roles": [
+    "CLASS_TEACHER",
+    "EXAM_CONTROLLER",
+    "SUBJECT_TEACHER",
+    "SUPER_ADMIN"
+   ]
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/exams/terms/{examTermId}/publish",
+   "roles": [
+    "CLASS_TEACHER",
+    "EXAM_CONTROLLER",
+    "SCHOOL_PRINCIPAL",
+    "SUPER_ADMIN"
+   ]
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/exams/terms/{examTermId}/rank-list",
+   "roles": [
+    "ACADEMIC_AUDITOR",
+    "CLASS_TEACHER",
+    "EXAM_CONTROLLER",
+    "REGISTRAR",
+    "SCHOOL_PRINCIPAL",
+    "SUBJECT_TEACHER",
+    "SUPER_ADMIN",
+    "VICE_PRINCIPAL"
+   ]
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/exams/terms/{examTermId}/school-results",
+   "roles": [
+    "ACADEMIC_AUDITOR",
+    "EXAM_CONTROLLER",
+    "SCHOOL_PRINCIPAL",
+    "SUPER_ADMIN",
+    "VICE_PRINCIPAL"
+   ]
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/exams/terms/{examTermId}/subjects",
+   "roles": [
+    "ACADEMIC_AUDITOR",
+    "CLASS_TEACHER",
+    "EXAM_CONTROLLER",
+    "REGISTRAR",
+    "SCHOOL_PRINCIPAL",
+    "SUBJECT_TEACHER",
+    "SUPER_ADMIN",
+    "VICE_PRINCIPAL"
+   ]
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/exams/terms/{examTermId}/subjects",
+   "roles": [
+    "EXAM_CONTROLLER",
+    "SCHOOL_PRINCIPAL",
+    "SUPER_ADMIN"
+   ]
+  },
+  {
+   "method": "PUT",
+   "path": "/api/v1/exams/terms/{examTermId}/template",
+   "roles": [
+    "EXAM_CONTROLLER",
+    "SCHOOL_PRINCIPAL",
+    "SUPER_ADMIN"
+   ]
+  },
+  {
+   "method": "GET",
+   "path": "/api/v1/exams/terms/{examTermId}/unlock-tickets",
+   "roles": [
+    "ACADEMIC_AUDITOR",
+    "CLASS_TEACHER",
+    "EXAM_CONTROLLER",
+    "REGISTRAR",
+    "SCHOOL_PRINCIPAL",
+    "SUBJECT_TEACHER",
+    "SUPER_ADMIN",
+    "VICE_PRINCIPAL"
+   ]
+  },
+  {
+   "method": "POST",
+   "path": "/api/v1/exams/terms/{examTermId}/unlock-tickets",
+   "roles": [
+    "CLASS_TEACHER",
+    "SUBJECT_TEACHER",
+    "SUPER_ADMIN"
+   ]
+  },
+  {
+   "method": "PATCH",
+   "path": "/api/v1/exams/unlock-tickets/{ticketId}/decision",
+   "roles": [
+    "EXAM_CONTROLLER",
+    "SCHOOL_PRINCIPAL",
+    "SUPER_ADMIN"
+   ]
+  }
+ ]
+}

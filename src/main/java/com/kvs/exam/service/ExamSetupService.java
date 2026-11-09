@@ -10,6 +10,7 @@ import com.kvs.exam.dto.ExamSubjectResponse;
 import com.kvs.exam.dto.ExamTermResponse;
 import com.kvs.exam.dto.GradingScaleResponse;
 import com.kvs.exam.entity.AcademicSession;
+import com.kvs.exam.entity.AssessmentTemplate;
 import com.kvs.exam.entity.ExamSubject;
 import com.kvs.exam.entity.ExamTerm;
 import com.kvs.exam.entity.Grade;
@@ -48,6 +49,7 @@ import java.util.UUID;
 public class ExamSetupService {
 
     @Autowired private GradingScaleRepository scaleRepository;
+    @Autowired private com.kvs.exam.repo.AssessmentTemplateRepository templateRepository;
     @Autowired private ExamTermRepository termRepository;
     @Autowired private ExamSubjectRepository subjectRepository;
     @Autowired private MarkEntryRepository markRepository;
@@ -83,6 +85,41 @@ public class ExamSetupService {
                 .build();
         scale = scaleRepository.save(scale);
         auditService.logSuccess("grading-scale:" + scale.getGradingScaleId(), "GRADING_SCALE_CREATED",
+                scale.getScaleName() + " with " + scale.getBands().size() + " bands, pass " + scale.getPassPercent() + "%");
+        return toResponse(scale);
+    }
+
+    /** Edit a grading scale's name, pass mark and bands. Refused while a locked term uses it, so closed results keep their grades. */
+    public GradingScaleResponse updateScale(UUID gradingScaleId, CreateGradingScaleRequest request) {
+        String tenantId = access.tenantFor(request.getTenantId());
+        GradingScale scale = scale(gradingScaleId, tenantId);
+        String name = request.getScaleName().trim();
+        if (!name.equalsIgnoreCase(scale.getScaleName()) && scaleRepository.existsByTenantIdAndScaleNameIgnoreCase(tenantId, name)) {
+            throw new ConflictException("A grading scale named " + name + " already exists");
+        }
+        Instant now = Instant.now();
+        termRepository.findByTenantIdOrderByStartDateAsc(tenantId).stream()
+                .filter(t -> gradingScaleId.equals(t.getGradingScaleId()) && t.isLocked(now)).findAny()
+                .ifPresent(t -> { throw new BadRequestException("This scale is used by " + t.getTermName() + ", which is closed: its grades cannot change"); });
+        Set<String> labels = new HashSet<>();
+        Set<BigDecimal> mins = new HashSet<>();
+        for (CreateGradingScaleRequest.Band b : request.getBands()) {
+            if (!labels.add(b.getGradeLabel().trim().toUpperCase()) || !mins.add(b.getMinPercent().stripTrailingZeros())) {
+                throw new BadRequestException("Each band needs its own grade label and minimum percentage");
+            }
+        }
+        if (request.getBands().stream().noneMatch(b -> b.getMinPercent().signum() == 0)) {
+            throw new BadRequestException("One band must start at 0% so every percentage gets a grade");
+        }
+        scale.setScaleName(name);
+        scale.setPassPercent(request.getPassPercent());
+        scale.getBands().clear();
+        scale.getBands().addAll(request.getBands().stream()
+                .sorted(Comparator.comparing(CreateGradingScaleRequest.Band::getMinPercent).reversed())
+                .map(b -> GradeBand.builder().gradeLabel(b.getGradeLabel().trim()).minPercent(b.getMinPercent())
+                        .gradePoint(b.getGradePoint()).description(b.getDescription()).build()).toList());
+        scale = scaleRepository.save(scale);
+        auditService.logSuccess("grading-scale:" + scale.getGradingScaleId(), "GRADING_SCALE_UPDATED",
                 scale.getScaleName() + " with " + scale.getBands().size() + " bands, pass " + scale.getPassPercent() + "%");
         return toResponse(scale);
     }
@@ -141,11 +178,28 @@ public class ExamSetupService {
                 .tenantId(tenantId).academicYearId(session.getAcademicYearId()).termName(name).termType(request.getTermType())
                 .weightagePercent(request.getWeightagePercent()).startDate(request.getStartDate()).endDate(request.getEndDate())
                 .markEntryDeadline(request.getMarkEntryDeadline()).gradingScaleId(request.getGradingScaleId())
+                .templateId(request.getTemplateId() == null ? null : visibleTemplate(request.getTemplateId(), tenantId).getTemplateId())
                 .build());
         auditService.logSuccess("exam-term:" + term.getExamTermId(), "EXAM_TERM_CREATED",
                 name + " (" + term.getTermType() + ", " + term.getWeightagePercent() + "%) in " + session.getSessionName()
                         + ", T_lock " + term.getMarkEntryDeadline());
         return toResponse(term);
+    }
+
+    /** Make a term follow an assessment template (its co-scholastic areas and progress-card layout); null clears it. */
+    public ExamTermResponse linkTemplate(UUID examTermId, UUID templateId) {
+        ExamTerm term = access.term(examTermId);
+        term.setTemplateId(templateId == null ? null : visibleTemplate(templateId, term.getTenantId()).getTemplateId());
+        termRepository.save(term);
+        auditService.logSuccess("exam-term:" + examTermId, "EXAM_TERM_TEMPLATE_LINKED",
+                term.getTermName() + (templateId == null ? " no longer follows a template" : " follows template " + templateId));
+        return toResponse(term);
+    }
+
+    private AssessmentTemplate visibleTemplate(UUID templateId, String tenantId) {
+        return templateRepository.findById(templateId)
+                .filter(t -> t.isMaster() || tenantId.equals(t.getTenantId()))
+                .orElseThrow(() -> new ResourceNotFoundException("AssessmentTemplate", "templateId", templateId));
     }
 
     @Transactional(readOnly = true)
@@ -185,6 +239,8 @@ public class ExamSetupService {
                 .locked(t.isLocked(Instant.now())).lockedAt(t.getLockedAt())
                 .gradingScaleId(t.getGradingScaleId())
                 .gradingScaleName(scaleRepository.findById(t.getGradingScaleId()).map(GradingScale::getScaleName).orElse(null))
+                .templateId(t.getTemplateId())
+                .templateName(t.getTemplateId() == null ? null : templateRepository.findById(t.getTemplateId()).map(AssessmentTemplate::getTemplateName).orElse(null))
                 .subjectCount(subjectRepository.findByExamTermIdOrderByDisplayOrderAsc(t.getExamTermId()).size())
                 .build();
     }

@@ -52,4 +52,7 @@ public class CreateExamTermRequest {
 
     @NotNull(message = "gradingScaleId is required")
     private UUID gradingScaleId;
+
+    /** Optional: the assessment template the term follows (its co-scholastic areas and progress-card layout) */
+    private UUID templateId;
 }
