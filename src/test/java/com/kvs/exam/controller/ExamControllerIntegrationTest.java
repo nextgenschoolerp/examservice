@@ -11,6 +11,7 @@ import com.kvs.exam.enums.Gender;
 import com.kvs.exam.enums.StudentStatus;
 import com.kvs.exam.repo.*;
 import org.junit.jupiter.api.AfterEach;
+import org.springframework.context.annotation.Import;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -35,6 +36,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
+@Import(TestClassAssignments.class)
 class ExamControllerIntegrationTest {
 
     private static final String TENANT = "TENANT-EXAM";
@@ -70,6 +72,9 @@ class ExamControllerIntegrationTest {
                 .startDate(LocalDate.of(year, 4, 1)).endDate(LocalDate.of(year + 1, 3, 31)).isActive(true).build());
         grade = gradeRepository.save(Grade.builder().tenantId(TENANT).gradeName("Class 6").gradeCode("GRADE-06-T").sequenceOrder(9).build());
         section = sectionRepository.save(Section.builder().gradeId(grade.getGradeId()).sectionName("A").build());
+        // RBAC Phase 6: teachers hold the exam permissions for their own classes (CLASS scope); both teach section A
+        TestClassAssignments.teach("subject_teacher-user", section.getSectionId());
+        TestClassAssignments.teach("class_teacher-user", section.getSectionId());
         asha = student("Asha", 1, PARENT);
         bilal = student("Bilal", 2, null);
         chitra = student("Chitra", 3, null);
@@ -81,6 +86,7 @@ class ExamControllerIntegrationTest {
 
     @AfterEach
     void tearDown() {
+        TestClassAssignments.clear();
         cardRepository.deleteAll();
         coScholasticRepository.deleteAll();
         ticketRepository.deleteAll();
@@ -115,6 +121,12 @@ class ExamControllerIntegrationTest {
     private String token(String role, String tenant, String userId) {
         return "Bearer " + jwtTokenService.generateToken(role.toLowerCase() + "@kvs.local",
                 Map.of("roles", List.of("ROLE_" + role), "tenantId", tenant, "userId", userId));
+    }
+
+    /** A token for a user of one campus (the branchId claim) */
+    private String campusToken(String role, String userId, String branchId) {
+        return "Bearer " + jwtTokenService.generateToken(role.toLowerCase() + "@kvs.local",
+                Map.of("roles", List.of("ROLE_" + role), "tenantId", TENANT, "userId", userId, "branchId", branchId));
     }
 
     private ResultActions post(String path, String token, Object body) throws Exception {
@@ -421,6 +433,9 @@ class ExamControllerIntegrationTest {
         String next = term("Next year test", 20, null);
         Grade grade7 = gradeRepository.save(Grade.builder().tenantId(TENANT).gradeName("Class 7").gradeCode("GRADE-07-T").sequenceOrder(10).build());
         Section section7 = sectionRepository.save(Section.builder().gradeId(grade7.getGradeId()).sectionName("A").build());
+        // RBAC Phase 6 (teachers reach only their classes): the teachers move up with the class and teach 7-A as well
+        TestClassAssignments.teach("subject_teacher-user", section.getSectionId(), section7.getSectionId());
+        TestClassAssignments.teach("class_teacher-user", section.getSectionId(), section7.getSectionId());
         try {
             // Batch promotion (studentservice) moves Asha to Class 7-A with status PROMOTED
             asha.setGradeId(grade7.getGradeId());
@@ -448,6 +463,47 @@ class ExamControllerIntegrationTest {
             subjectRepository.deleteAll();
             sectionRepository.delete(section7);
             gradeRepository.delete(grade7);
+        }
+    }
+
+    @Test
+    @DisplayName("RBAC Phase 6: a teacher reaches only their own classes, a parent only their own child, a registrar only their campus")
+    void dataScopes() throws Exception {
+        String termId = term("Unit Test 1", 10, null);
+        Section other = sectionRepository.save(Section.builder().gradeId(grade.getGradeId()).sectionName("B").build());
+        StudentMaster dev = studentRepository.save(StudentMaster.builder().tenantId(TENANT).branchId("BR-1")
+                .studentUid("EX-DEV-" + UUID.randomUUID().toString().substring(0, 6)).firstName("Dev").lastName("Test")
+                .dateOfBirth(LocalDate.of(2014, 5, 1)).gender(Gender.MALE).gradeId(grade.getGradeId()).sectionId(other.getSectionId())
+                .rollNumber(1).studentStatus(StudentStatus.ACTIVE).build());
+        try {
+            // teacher of section A: section B's grid, marks, publishing and pupils are refused
+            getAs("/api/v1/exams/terms/" + termId + "/marks", token("SUBJECT_TEACHER"), "sectionId", other.getSectionId().toString(), "subjectCode", "ENG")
+                    .andExpect(status().isForbidden());
+            putJson("/api/v1/exams/terms/" + termId + "/marks", token("SUBJECT_TEACHER"), Map.of("sectionId", other.getSectionId(),
+                    "subjectCode", "ENG", "entries", List.of(Map.of("studentId", dev.getStudentId(), "marksObtained", 50)))).andExpect(status().isForbidden());
+            post("/api/v1/exams/terms/" + termId + "/publish", token("CLASS_TEACHER"), Map.of("sectionId", other.getSectionId())).andExpect(status().isForbidden());
+            getAs("/api/v1/exams/students/" + dev.getStudentId() + "/progress-card", token("CLASS_TEACHER"), "examTermId", termId).andExpect(status().isForbidden());
+            // ... while their own section works, and a grade-wide rank list shows only their own section
+            getAs("/api/v1/exams/terms/" + termId + "/marks", token("SUBJECT_TEACHER"), "sectionId", section.getSectionId().toString(), "subjectCode", "ENG")
+                    .andExpect(status().isOk());
+            getAs("/api/v1/exams/students/" + asha.getStudentId() + "/progress-card", token("CLASS_TEACHER"), "examTermId", termId).andExpect(status().isOk());
+            // a teacher with no class reaches none
+            getAs("/api/v1/exams/terms/" + termId + "/marks", token("SUBJECT_TEACHER", TENANT, "new-teacher"), "sectionId", section.getSectionId().toString(),
+                    "subjectCode", "ENG").andExpect(status().isForbidden());
+            // the exam controller (campus-wide) reaches section B
+            getAs("/api/v1/exams/terms/" + termId + "/marks", token("EXAM_CONTROLLER"), "sectionId", other.getSectionId().toString(), "subjectCode", "ENG")
+                    .andExpect(status().isOk());
+            // a parent reaches only their own child; another child looks as if it did not exist
+            String parent = token("APPLICANT_PARENT", TENANT, PARENT);
+            getAs("/api/v1/exams/students/" + dev.getStudentId() + "/progress-trend", parent).andExpect(status().isNotFound());
+            // a registrar of campus BR-2 cannot open a BR-1 pupil; of BR-1 they can
+            getAs("/api/v1/exams/students/" + asha.getStudentId() + "/progress-card", campusToken("REGISTRAR", "reg-2", "BR-2"), "examTermId", termId)
+                    .andExpect(status().isForbidden());
+            getAs("/api/v1/exams/students/" + asha.getStudentId() + "/progress-card", campusToken("REGISTRAR", "reg-1", "BR-1"), "examTermId", termId)
+                    .andExpect(status().isOk());
+        } finally {
+            studentRepository.delete(dev);
+            sectionRepository.delete(other);
         }
     }
 }

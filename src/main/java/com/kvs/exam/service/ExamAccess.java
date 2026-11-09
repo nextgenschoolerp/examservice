@@ -2,6 +2,7 @@ package com.kvs.exam.service;
 
 import com.kvs.core.exception.BadRequestException;
 import com.kvs.core.exception.ResourceNotFoundException;
+import com.kvs.core.rbac.ScopeGuard;
 import com.kvs.core.util.SecurityUtils;
 import com.kvs.exam.entity.ExamTerm;
 import com.kvs.exam.entity.Grade;
@@ -25,16 +26,32 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * Tenant, parent and roster helpers for the Module 05 assessment services. Records of another institution look as if
- * they did not exist; a parent (APPLICANT_PARENT without a staff role) only sees their own children.
+ * School, scope and roster helpers for the Module 05 assessment services (RBAC Phase 6: data scopes from ms-core's
+ * {@link ScopeGuard}). Records of another institution look as if they did not exist. Within the school, the scope the
+ * caller holds the permission with decides what they reach:
+ * <ul>
+ *   <li>OWN (parents): only their own children; anyone else's child looks as if it did not exist;</li>
+ *   <li>CLASS (teachers): only the sections they teach or are class teacher of;</li>
+ *   <li>BRANCH: only their campus; TENANT: every campus.</li>
+ * </ul>
  */
 @Component
 public class ExamAccess {
 
-    private static final Set<String> STAFF_ROLES = Set.of("ROLE_EXAM_CONTROLLER", "ROLE_SUBJECT_TEACHER", "ROLE_CLASS_TEACHER",
-            "ROLE_SCHOOL_PRINCIPAL", "ROLE_VICE_PRINCIPAL", "ROLE_ACADEMIC_AUDITOR", "ROLE_REGISTRAR", "ROLE_SUPER_ADMIN");
+    /** Reading marks, results and progress (the progress card's permission, held by parents with OWN scope) */
+    public static final String VIEW_STUDENTS = "exam.students.view";
+    /** Reading a term's grids, broadsheets, rank lists and completeness */
+    public static final String VIEW_TERMS = "exam.terms.view";
+    /** Entering marks and co-scholastic grades */
+    public static final String ENTER_MARKS = "exam.terms.manage";
+    /** Class teacher's remarks on the progress card */
+    public static final String WRITE_REMARKS = "exam.students.manage";
+    /** Publishing a section's results */
+    public static final String PUBLISH = "exam.terms-2.manage";
+    /** Asking for a locked subject to be reopened */
+    public static final String REQUEST_UNLOCK = "exam.terms-3.manage";
 
-    @Autowired private TenantAccessGuard tenantGuard;
+    @Autowired private ScopeGuard tenantGuard;
     @Autowired private ExamTermRepository termRepository;
     @Autowired private SectionRepository sectionRepository;
     @Autowired private GradeRepository gradeRepository;
@@ -78,6 +95,23 @@ public class ExamAccess {
         return section;
     }
 
+    /** A section of the school that the caller reaches with this permission (CLASS scope: one of their own sections) */
+    public Section section(UUID sectionId, String tenantId, String permission) {
+        Section section = section(sectionId, tenantId);
+        tenantGuard.requireClass(permission, section.getSectionId());
+        return section;
+    }
+
+    /** The sections of a list the caller reaches with this permission (CLASS scope keeps their own; wider scopes keep all) */
+    public List<Section> reachable(List<Section> sections, String permission) {
+        return sections.stream().filter(s -> tenantGuard.reachesClass(permission, s.getSectionId())).toList();
+    }
+
+    /** The campus to read: the caller's own unless they hold the permission school-wide */
+    public String campus(String permission, String requestedBranchId) {
+        return tenantGuard.branchFor(permission, requestedBranchId);
+    }
+
     public String className(Section section) {
         return gradeRepository.findById(section.getGradeId()).map(Grade::getGradeName).orElse("") + "-" + section.getSectionName();
     }
@@ -116,20 +150,33 @@ public class ExamAccess {
     }
 
     /** A student the caller may see: same institution, and for a parent only their own child. */
+    /** A student whose results the caller may read (see {@link #student(UUID, String)}) */
     public StudentMaster student(UUID studentId) {
+        return student(studentId, VIEW_STUDENTS);
+    }
+
+    /**
+     * A student the caller reaches with this permission: of their school; with OWN scope their own child (anyone else's
+     * child looks as if it did not exist); with CLASS scope one of their sections; below TENANT scope on their campus.
+     */
+    public StudentMaster student(UUID studentId, String permission) {
         StudentMaster s = studentRepository.findByStudentId(studentId)
                 .orElseThrow(() -> new ResourceNotFoundException("StudentMaster", "studentId", studentId));
         tenantGuard.requireTenantRecord(s.getTenantId(), "StudentMaster", "studentId", studentId);
-        if (isParentOnly() && !tenantGuard.currentUserId().map(id -> id.equals(s.getParentAccountId())).orElse(false)) {
-            throw new ResourceNotFoundException("StudentMaster", "studentId", studentId);
+        tenantGuard.requireOwnChild(permission, studentId, s.getParentAccountId());
+        if (!tenantGuard.ownOnly(permission)) {
+            tenantGuard.requireClass(permission, s.getSectionId());
+            tenantGuard.requireBranch(permission, s.getBranchId());
         }
         return s;
     }
 
-    /** True for a parent account without a school staff role. */
+    /**
+     * True when the caller reads results only for their own children (OWN scope: parents). They then see published
+     * results only.
+     */
     public boolean isParentOnly() {
-        List<String> roles = SecurityUtils.getCurrentUserRoles();
-        return roles.contains("ROLE_APPLICANT_PARENT") && roles.stream().noneMatch(STAFF_ROLES::contains);
+        return tenantGuard.ownOnly(VIEW_STUDENTS);
     }
 
     public String currentUser() {

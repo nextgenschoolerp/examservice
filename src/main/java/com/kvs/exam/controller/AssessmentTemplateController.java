@@ -1,7 +1,7 @@
 package com.kvs.exam.controller;
 
+import com.kvs.exam.config.ExamPerms;
 import com.kvs.core.dto.ApiResponse;
-import com.kvs.exam.config.ExamRoles;
 import com.kvs.exam.dto.ApplyTemplateRequest;
 import com.kvs.exam.dto.ApplyTemplateResponse;
 import com.kvs.exam.dto.AssessmentTemplateResponse;
@@ -28,28 +28,28 @@ public class AssessmentTemplateController {
     @Autowired private AssessmentTemplateService service;
 
     @GetMapping
-    @PreAuthorize(ExamRoles.VIEW)
+    @PreAuthorize(ExamPerms.TERMS_VIEW)
     public ResponseEntity<ApiResponse<List<AssessmentTemplateResponse>>> list(@RequestParam(value = "tenantId", required = false) String tenantId,
                                                                               @RequestParam(value = "boardCode", required = false) String boardCode) {
         return ResponseEntity.ok(ApiResponse.success(service.list(tenantId, boardCode)));
     }
 
     @GetMapping("/{templateId}")
-    @PreAuthorize(ExamRoles.VIEW)
+    @PreAuthorize(ExamPerms.TERMS_VIEW)
     public ResponseEntity<ApiResponse<AssessmentTemplateResponse>> get(@PathVariable("templateId") UUID templateId,
                                                                        @RequestParam(value = "tenantId", required = false) String tenantId) {
         return ResponseEntity.ok(ApiResponse.success(service.get(templateId, tenantId)));
     }
 
     @PostMapping("/{templateId}/copy")
-    @PreAuthorize(ExamRoles.CONFIGURE)
+    @PreAuthorize(ExamPerms.TEMPLATES_MANAGE)
     public ResponseEntity<ApiResponse<AssessmentTemplateResponse>> copy(@PathVariable("templateId") UUID templateId,
                                                                         @RequestParam(value = "tenantId", required = false) String tenantId) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success("Template copied", service.copy(templateId, tenantId)));
     }
 
     @PutMapping("/{templateId}")
-    @PreAuthorize(ExamRoles.CONFIGURE)
+    @PreAuthorize(ExamPerms.TEMPLATES_MANAGE)
     public ResponseEntity<ApiResponse<AssessmentTemplateResponse>> save(@PathVariable("templateId") UUID templateId,
                                                                         @RequestParam(value = "tenantId", required = false) String tenantId,
                                                                         @Valid @RequestBody SaveAssessmentTemplateRequest request) {
@@ -57,7 +57,7 @@ public class AssessmentTemplateController {
     }
 
     @DeleteMapping("/{templateId}")
-    @PreAuthorize(ExamRoles.CONFIGURE)
+    @PreAuthorize(ExamPerms.TEMPLATES_MANAGE)
     public ResponseEntity<ApiResponse<Void>> delete(@PathVariable("templateId") UUID templateId,
                                                     @RequestParam(value = "tenantId", required = false) String tenantId) {
         service.delete(templateId, tenantId);
@@ -65,7 +65,7 @@ public class AssessmentTemplateController {
     }
 
     @PostMapping("/{templateId}/apply")
-    @PreAuthorize(ExamRoles.CONFIGURE)
+    @PreAuthorize(ExamPerms.TEMPLATES_MANAGE)
     public ResponseEntity<ApiResponse<ApplyTemplateResponse>> apply(@PathVariable("templateId") UUID templateId,
                                                                     @Valid @RequestBody ApplyTemplateRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success("Template applied", service.apply(templateId, request)));

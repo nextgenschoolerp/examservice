@@ -31,3 +31,11 @@ logging:
   level:
     root: warn
     com.kvs: info
+
+kvs:
+  # Tests have no authservice: permissions come from the catalogue's defaults (ms-core rbac/permissions.json)
+  rbac:
+    resolver: static
+  access-rules:
+    path: /api/v1/exam/access-rules
+    base-package: com.kvs.exam

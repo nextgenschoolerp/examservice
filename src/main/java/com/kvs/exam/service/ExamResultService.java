@@ -183,7 +183,8 @@ public class ExamResultService {
     @Transactional(readOnly = true)
     public BroadsheetResponse broadsheet(UUID examTermId, UUID sectionId, String branchId) {
         ExamTerm term = access.term(examTermId);
-        Section section = access.section(sectionId, term.getTenantId());
+        Section section = access.section(sectionId, term.getTenantId(), ExamAccess.VIEW_TERMS);
+        branchId = access.campus(ExamAccess.VIEW_TERMS, branchId);
         Map<UUID, Integer> ranks = new LinkedHashMap<>();
         List<StudentResult> results = sectionResults(term, section, branchId, ranks);
         List<ExamSubject> subjects = subjectRepository.findByExamTermIdAndGradeIdOrderByDisplayOrderAsc(examTermId, section.getGradeId());
@@ -229,8 +230,8 @@ public class ExamResultService {
         ExamTerm term = access.term(examTermId);
         List<BroadsheetResponse> sheets = new ArrayList<>();
         for (com.kvs.exam.entity.Grade grade : gradeRepository.findByTenantIdOrderBySequenceOrderAsc(term.getTenantId())) {
-            for (Section section : sectionRepository.findByGradeId(grade.getGradeId())) {
-                if (!access.roster(section, term, branchId).isEmpty()) {
+            for (Section section : access.reachable(sectionRepository.findByGradeId(grade.getGradeId()), ExamAccess.VIEW_TERMS)) {
+                if (!access.roster(section, term, access.campus(ExamAccess.VIEW_TERMS, branchId)).isEmpty()) {
                     sheets.add(broadsheet(examTermId, section.getSectionId(), branchId));
                 }
             }
@@ -246,8 +247,9 @@ public class ExamResultService {
         if ((gradeId == null) == (sectionId == null)) {
             throw new BadRequestException("Give either gradeId (whole class) or sectionId");
         }
-        List<Section> sections = sectionId != null ? List.of(access.section(sectionId, term.getTenantId()))
-                : sectionRepository.findByGradeId(access.grade(gradeId, term.getTenantId()).getGradeId());
+        List<Section> sections = sectionId != null ? List.of(access.section(sectionId, term.getTenantId(), ExamAccess.VIEW_TERMS))
+                : access.reachable(sectionRepository.findByGradeId(access.grade(gradeId, term.getTenantId()).getGradeId()), ExamAccess.VIEW_TERMS);
+        branchId = access.campus(ExamAccess.VIEW_TERMS, branchId);
         UUID grade = sections.isEmpty() ? gradeId : sections.get(0).getGradeId();
         Map<UUID, String> classOf = new LinkedHashMap<>();
         List<StudentMaster> students = new ArrayList<>();
@@ -310,7 +312,7 @@ public class ExamResultService {
             if (!seen.add(e.getStudentId() + "|" + e.getArea())) {
                 throw new BadRequestException(e.getArea() + " appears twice for student " + e.getStudentId());
             }
-            StudentMaster s = access.student(e.getStudentId());
+            StudentMaster s = access.student(e.getStudentId(), ExamAccess.ENTER_MARKS);
             if (!s.getTenantId().equals(term.getTenantId())) {
                 throw new ResourceNotFoundException("StudentMaster", "studentId", e.getStudentId());
             }
@@ -330,8 +332,8 @@ public class ExamResultService {
     @Transactional(readOnly = true)
     public CoScholasticResponse coScholastic(UUID examTermId, UUID sectionId, String branchId) {
         ExamTerm term = access.term(examTermId);
-        Section section = access.section(sectionId, term.getTenantId());
-        return coScholastic(term, access.roster(section, term, branchId));
+        Section section = access.section(sectionId, term.getTenantId(), ExamAccess.VIEW_TERMS);
+        return coScholastic(term, access.roster(section, term, access.campus(ExamAccess.VIEW_TERMS, branchId)));
     }
 
     private CoScholasticResponse coScholastic(ExamTerm term, List<StudentMaster> students) {
@@ -360,7 +362,7 @@ public class ExamResultService {
     // ------------------------------------------------------------------ US-05018 remarks, US-05010 publish
 
     public ProgressCardResponse saveRemarks(UUID studentId, ProgressRemarksRequest request) {
-        StudentMaster s = access.student(studentId);
+        StudentMaster s = access.student(studentId, ExamAccess.WRITE_REMARKS);
         ExamTerm term = access.term(request.getExamTermId());
         ProgressCard card = cardRepository.findByExamTermIdAndStudentId(term.getExamTermId(), studentId)
                 .orElseGet(() -> ProgressCard.builder().examTermId(term.getExamTermId()).studentId(studentId).build());
@@ -377,7 +379,8 @@ public class ExamResultService {
     /** Publishes the section's progress cards to parents; refused while any mark entry is missing (US-05016). */
     public PublishResultsResponse publish(UUID examTermId, UUID sectionId, String branchId) {
         ExamTerm term = access.term(examTermId);
-        Section section = access.section(sectionId, term.getTenantId());
+        Section section = access.section(sectionId, term.getTenantId(), ExamAccess.PUBLISH);
+        branchId = access.campus(ExamAccess.PUBLISH, branchId);
         MarkCompletenessResponse check = markEntryService.completeness(examTermId, sectionId, null, branchId);
         if (check.getExpectedEntries() == 0) {
             throw new ConflictException(access.className(section) + " has no students or subjects for " + term.getTermName());

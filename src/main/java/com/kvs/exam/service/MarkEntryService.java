@@ -89,7 +89,8 @@ public class MarkEntryService {
     @Transactional(readOnly = true)
     public MarkSheetResponse markSheet(UUID examTermId, UUID sectionId, String subjectCode, String branchId) {
         ExamTerm term = access.term(examTermId);
-        Section section = access.section(sectionId, term.getTenantId());
+        Section section = access.section(sectionId, term.getTenantId(), ExamAccess.VIEW_TERMS);
+        branchId = access.campus(ExamAccess.VIEW_TERMS, branchId);
         ExamSubject subject = subject(term, section, subjectCode);
         List<StudentMaster> roster = access.roster(section, term, branchId);
         Map<UUID, MarkEntry> marks = markRepository.findByExamSubjectIdIn(List.of(subject.getExamSubjectId())).stream()
@@ -123,7 +124,8 @@ public class MarkEntryService {
     /** Saves the grid; refused once the term is locked unless an approved ticket reopened this subject for the section. */
     public MarkSheetResponse saveMarks(UUID examTermId, SaveMarksRequest request, String branchId) {
         ExamTerm term = access.term(examTermId);
-        Section section = access.section(request.getSectionId(), term.getTenantId());
+        Section section = access.section(request.getSectionId(), term.getTenantId(), ExamAccess.ENTER_MARKS);
+        branchId = access.campus(ExamAccess.ENTER_MARKS, branchId);
         ExamSubject subject = subject(term, section, request.getSubjectCode());
         Instant now = Instant.now();
         Optional<MarkUnlockTicket> ticket = openTicket(subject, section.getSectionId(), now);
@@ -240,7 +242,7 @@ public class MarkEntryService {
 
     public UnlockTicketResponse requestUnlock(UUID examTermId, UnlockTicketRequest request) {
         ExamTerm term = access.term(examTermId);
-        Section section = access.section(request.getSectionId(), term.getTenantId());
+        Section section = access.section(request.getSectionId(), term.getTenantId(), ExamAccess.REQUEST_UNLOCK);
         ExamSubject subject = subject(term, section, request.getSubjectCode());
         Instant now = Instant.now();
         if (!term.isLocked(now)) {
@@ -318,9 +320,10 @@ public class MarkEntryService {
     @Transactional(readOnly = true)
     public MarkCompletenessResponse completeness(UUID examTermId, UUID sectionId, UUID gradeId, String branchId) {
         ExamTerm term = access.term(examTermId);
+        branchId = access.campus(ExamAccess.VIEW_TERMS, branchId);
         List<Section> sections = new ArrayList<>();
         if (sectionId != null) {
-            sections.add(access.section(sectionId, term.getTenantId()));
+            sections.add(access.section(sectionId, term.getTenantId(), ExamAccess.VIEW_TERMS));
         } else {
             List<UUID> grades = gradeId != null ? List.of(access.grade(gradeId, term.getTenantId()).getGradeId())
                     : subjectRepository.findByExamTermIdOrderByDisplayOrderAsc(examTermId).stream().map(ExamSubject::getGradeId).distinct().toList();
@@ -331,7 +334,7 @@ public class MarkEntryService {
                             .sorted((a, b) -> a.getSectionName().compareTo(b.getSectionName())).forEach(sections::add));
         }
         List<MarkCompletenessResponse.Item> items = new ArrayList<>();
-        for (Section section : sections) {
+        for (Section section : access.reachable(sections, ExamAccess.VIEW_TERMS)) {
             List<StudentMaster> roster = access.roster(section, term, branchId);
             if (roster.isEmpty()) {
                 continue;
