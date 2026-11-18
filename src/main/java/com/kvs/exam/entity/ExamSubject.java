@@ -9,10 +9,13 @@ import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.UUID;
 
 /**
- * A subject examined in a term for one class, with its maximum and pass marks and weightage (US-05000).
+ * A subject examined in a term for one class, with its maximum and pass marks and weightage (US-05000), and its place
+ * on the date sheet (date and time of the paper, printed on admit cards; null until scheduled).
  */
 @Entity
 @Table(name = "exam_term_subjects", uniqueConstraints = @UniqueConstraint(name = "uk_exam_subject_term_grade_code", columnNames = {"exam_term_id", "grade_id", "subject_code"}))
@@ -53,4 +56,14 @@ public class ExamSubject extends BaseAuditEntity {
 
     @Column(name = "display_order", nullable = false)
     private Integer displayOrder;
+
+    /** Date of the paper (date sheet); null until scheduled */
+    @Column(name = "exam_date")
+    private LocalDate examDate;
+
+    @Column(name = "start_time")
+    private LocalTime startTime;
+
+    @Column(name = "end_time")
+    private LocalTime endTime;
 }

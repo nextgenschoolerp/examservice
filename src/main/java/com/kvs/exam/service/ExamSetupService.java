@@ -9,6 +9,7 @@ import com.kvs.exam.dto.CreateGradingScaleRequest;
 import com.kvs.exam.dto.ExamSubjectResponse;
 import com.kvs.exam.dto.ExamTermResponse;
 import com.kvs.exam.dto.GradingScaleResponse;
+import com.kvs.exam.dto.SaveDateSheetRequest;
 import com.kvs.exam.entity.AcademicSession;
 import com.kvs.exam.entity.AssessmentTemplate;
 import com.kvs.exam.entity.ExamSubject;
@@ -288,6 +289,51 @@ public class ExamSetupService {
                 .gradeName(gradeRepository.findById(s.getGradeId()).map(Grade::getGradeName).orElse(null))
                 .subjectCode(s.getSubjectCode()).subjectName(s.getSubjectName()).maxMarks(s.getMaxMarks())
                 .passMarks(s.getPassMarks()).weightage(s.getWeightage())
+                .examDate(s.getExamDate()).startTime(s.getStartTime()).endTime(s.getEndTime())
                 .build()).toList();
+    }
+
+    /**
+     * Sets the date sheet of one class: the date and time of each listed paper. The subject must be configured for the
+     * class; the date must fall within the term; start and end time come together and end is after start; a null
+     * date clears the paper's date and times. Subjects not listed keep theirs.
+     */
+    public List<ExamSubjectResponse> saveDateSheet(UUID examTermId, SaveDateSheetRequest request) {
+        ExamTerm term = access.term(examTermId);
+        Grade grade = access.grade(request.getGradeId(), term.getTenantId());
+        Set<String> codes = new HashSet<>();
+        List<ExamSubject> changed = new ArrayList<>();
+        for (SaveDateSheetRequest.Entry e : request.getEntries()) {
+            String code = e.getSubjectCode().trim();
+            if (!codes.add(code)) {
+                throw new BadRequestException("Subject " + code + " appears twice");
+            }
+            ExamSubject subject = subjectRepository.findByExamTermIdAndGradeIdAndSubjectCode(examTermId, grade.getGradeId(), code)
+                    .orElseThrow(() -> new BadRequestException(code + " is not a subject of " + grade.getGradeName() + " in " + term.getTermName()));
+            if (e.getExamDate() == null) {
+                subject.setExamDate(null);
+                subject.setStartTime(null);
+                subject.setEndTime(null);
+            } else {
+                if ((term.getStartDate() != null && e.getExamDate().isBefore(term.getStartDate()))
+                        || (term.getEndDate() != null && e.getExamDate().isAfter(term.getEndDate()))) {
+                    throw new BadRequestException(code + ": the date must fall within " + term.getTermName()
+                            + " (" + term.getStartDate() + " to " + term.getEndDate() + ")");
+                }
+                if ((e.getStartTime() == null) != (e.getEndTime() == null)) {
+                    throw new BadRequestException(code + ": give both the start and the end time, or neither");
+                }
+                if (e.getStartTime() != null && !e.getEndTime().isAfter(e.getStartTime())) {
+                    throw new BadRequestException(code + ": the end time must be after the start time");
+                }
+                subject.setExamDate(e.getExamDate());
+                subject.setStartTime(e.getStartTime());
+                subject.setEndTime(e.getEndTime());
+            }
+            changed.add(subject);
+        }
+        subjectRepository.saveAll(changed);
+        auditService.logSuccess("exam-term:" + examTermId, "EXAM_DATE_SHEET_SAVED", grade.getGradeName() + ": " + String.join(", ", codes));
+        return listSubjects(examTermId, grade.getGradeId());
     }
 }

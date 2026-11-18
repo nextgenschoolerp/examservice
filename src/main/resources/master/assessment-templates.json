@@ -1,5 +1,5 @@
 {
-  "_about": "Master data: assessment templates per board (terms with weightage, grading scale, pass mark, co-scholastic areas, report-card layout). Loaded into assessment_templates at startup (missing codes only). The same rows are written into database/insert.sql by database/generate-templates-sql.mjs. A school copies a template to edit it and applies it to create its grading scale and exam terms. boardCode STATE means every state board. needsReview=true: a starting point to check against the board's own handbook before use.",
+  "_about": "Master data: assessment templates per board (terms with weightage, grading scale, pass mark, co-scholastic areas, report-card layout). Loaded into assessment_templates at startup (missing codes only). The same rows are written into database/modules by database/generators/generate-templates-sql.mjs. A school copies a template to edit it and applies it to create its grading scale and exam terms. boardCode STATE means every state board. needsReview=true: a starting point to check against the board's own handbook before use.",
   "templates": [
     {
       "code": "CBSE_STANDARD",

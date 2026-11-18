@@ -4,13 +4,18 @@ import com.kvs.exam.config.ExamPerms;
 import com.kvs.core.dto.ApiResponse;
 import com.kvs.core.exception.BadRequestException;
 import com.kvs.exam.dto.*;
+import com.kvs.exam.service.AdmitCardService;
 import com.kvs.exam.service.ExamResultService;
 import com.kvs.exam.service.ExamSetupService;
 import com.kvs.exam.service.MarkEntryService;
+import com.kvs.exam.service.ReportCardService;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -42,6 +47,8 @@ public class ExamController {
     @Autowired private ExamSetupService setupService;
     @Autowired private MarkEntryService markEntryService;
     @Autowired private ExamResultService resultService;
+    @Autowired private AdmitCardService admitCardService;
+    @Autowired private ReportCardService reportCardService;
 
     // ------------------------------------------------------------------ US-05000 setup
 
@@ -104,6 +111,77 @@ public class ExamController {
     public ResponseEntity<ApiResponse<List<ExamSubjectResponse>>> listSubjects(@PathVariable("examTermId") UUID examTermId,
                                                                                @RequestParam(value = "gradeId", required = false) UUID gradeId) {
         return ResponseEntity.ok(ApiResponse.success(setupService.listSubjects(examTermId, gradeId)));
+    }
+
+    /** Date sheet: the date and time of each paper of one class (printed on admit cards) */
+    @PutMapping("/terms/{examTermId}/date-sheet")
+    @PreAuthorize(ExamPerms.TEMPLATES_MANAGE)
+    public ResponseEntity<ApiResponse<List<ExamSubjectResponse>>> saveDateSheet(@PathVariable("examTermId") UUID examTermId,
+                                                                                @Valid @RequestBody SaveDateSheetRequest request) {
+        return ResponseEntity.ok(ApiResponse.success("Date sheet saved", setupService.saveDateSheet(examTermId, request)));
+    }
+
+    /** Admit cards of a section, one page per student; students on hold are left out and counted in X-Admit-Cards-Withheld */
+    @GetMapping("/terms/{examTermId}/admit-cards")
+    @PreAuthorize(ExamPerms.TERMS_VIEW)
+    public ResponseEntity<byte[]> admitCards(@PathVariable("examTermId") UUID examTermId,
+                                             @RequestParam(value = "sectionId", required = false) UUID sectionId,
+                                             @RequestParam(value = "branchId", required = false) String branchId) {
+        return pdf(admitCardService.forSection(examTermId, require(sectionId, "sectionId"), branchId));
+    }
+
+    /** One student's admit card (staff, and a parent for their own child); 409 when the student is on hold */
+    @GetMapping("/students/{studentId}/admit-card")
+    @PreAuthorize(ExamPerms.STUDENTS_VIEW)
+    public ResponseEntity<byte[]> admitCard(@PathVariable("studentId") UUID studentId,
+                                            @RequestParam(value = "examTermId", required = false) UUID examTermId) {
+        return pdf(admitCardService.forStudent(require(examTermId, "examTermId"), studentId));
+    }
+
+    /** A student's date sheet for a term (staff, and a parent for their own child: the parent app's hall ticket) */
+    @GetMapping("/students/{studentId}/date-sheet")
+    @PreAuthorize(ExamPerms.STUDENTS_VIEW)
+    public ResponseEntity<ApiResponse<StudentDateSheetResponse>> studentDateSheet(@PathVariable("studentId") UUID studentId,
+                                                                                  @RequestParam(value = "examTermId", required = false) UUID examTermId) {
+        return ResponseEntity.ok(ApiResponse.success(admitCardService.dateSheetFor(require(examTermId, "examTermId"), studentId)));
+    }
+
+    /** Report cards of a section as one PDF, each student on a new page; DRAFT watermark until published */
+    @GetMapping("/terms/{examTermId}/report-cards")
+    @PreAuthorize(ExamPerms.TERMS_VIEW)
+    public ResponseEntity<byte[]> reportCards(@PathVariable("examTermId") UUID examTermId,
+                                              @RequestParam(value = "sectionId", required = false) UUID sectionId,
+                                              @RequestParam(value = "branchId", required = false) String branchId) {
+        ReportCardService.ReportCards cards = reportCardService.forSection(examTermId, require(sectionId, "sectionId"), branchId);
+        return pdf(cards.pdf(), cards.filename(), "X-Report-Cards", cards.cards());
+    }
+
+    /** One student's report card as a PDF (the progress card's access: a parent only once it is published) */
+    @GetMapping("/students/{studentId}/progress-card/pdf")
+    @PreAuthorize(ExamPerms.STUDENTS_VIEW)
+    public ResponseEntity<byte[]> reportCard(@PathVariable("studentId") UUID studentId,
+                                             @RequestParam(value = "examTermId", required = false) UUID examTermId) {
+        ReportCardService.ReportCards card = reportCardService.forStudent(require(examTermId, "examTermId"), studentId);
+        return pdf(card.pdf(), card.filename(), "X-Report-Cards", card.cards());
+    }
+
+    private static ResponseEntity<byte[]> pdf(byte[] body, String filename, String countHeader, int count) {
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_PDF)
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment().filename(filename).build().toString())
+                .header(countHeader, String.valueOf(count))
+                .header(HttpHeaders.ACCESS_CONTROL_EXPOSE_HEADERS, "Content-Disposition, " + countHeader)
+                .body(body);
+    }
+
+    private static ResponseEntity<byte[]> pdf(AdmitCardService.AdmitCards cards) {
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_PDF)
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment().filename(cards.filename()).build().toString())
+                .header("X-Admit-Cards", String.valueOf(cards.cards()))
+                .header("X-Admit-Cards-Withheld", String.valueOf(cards.withheld()))
+                .header(HttpHeaders.ACCESS_CONTROL_EXPOSE_HEADERS, "Content-Disposition, X-Admit-Cards, X-Admit-Cards-Withheld")
+                .body(cards.pdf());
     }
 
     /** US-05005: lock mark entry now */
