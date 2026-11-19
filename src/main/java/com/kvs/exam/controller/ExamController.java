@@ -9,6 +9,7 @@ import com.kvs.exam.service.ExamResultService;
 import com.kvs.exam.service.ExamSetupService;
 import com.kvs.exam.service.MarkEntryService;
 import com.kvs.exam.service.ReportCardService;
+import com.kvs.exam.service.SeatingService;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -49,6 +50,7 @@ public class ExamController {
     @Autowired private ExamResultService resultService;
     @Autowired private AdmitCardService admitCardService;
     @Autowired private ReportCardService reportCardService;
+    @Autowired private SeatingService seatingService;
 
     // ------------------------------------------------------------------ US-05000 setup
 
@@ -119,6 +121,33 @@ public class ExamController {
     public ResponseEntity<ApiResponse<List<ExamSubjectResponse>>> saveDateSheet(@PathVariable("examTermId") UUID examTermId,
                                                                                 @Valid @RequestBody SaveDateSheetRequest request) {
         return ResponseEntity.ok(ApiResponse.success("Date sheet saved", setupService.saveDateSheet(examTermId, request)));
+    }
+
+    /** Seating of a class for an exam: its room and each student's seat (the roll number unless set by hand) */
+    @GetMapping("/terms/{examTermId}/seating")
+    @PreAuthorize(ExamPerms.TERMS_VIEW)
+    public ResponseEntity<ApiResponse<SeatingResponse>> seating(@PathVariable("examTermId") UUID examTermId,
+                                                                @RequestParam(value = "sectionId", required = false) UUID sectionId,
+                                                                @RequestParam(value = "branchId", required = false) String branchId) {
+        return ResponseEntity.ok(ApiResponse.success(seatingService.seating(examTermId, require(sectionId, "sectionId"), branchId)));
+    }
+
+    /** The room where a class sits an exam; a blank room clears it */
+    @PutMapping("/terms/{examTermId}/sections/{sectionId}/room")
+    @PreAuthorize(ExamPerms.TEMPLATES_MANAGE)
+    public ResponseEntity<ApiResponse<String>> saveRoom(@PathVariable("examTermId") UUID examTermId,
+                                                        @PathVariable("sectionId") UUID sectionId,
+                                                        @RequestBody SaveRoomRequest request) {
+        return ResponseEntity.ok(ApiResponse.success("Room saved", seatingService.saveRoom(examTermId, sectionId, request.room())));
+    }
+
+    /** Seats set by hand for students of an exam; a blank seat takes the student back to the roll number */
+    @PutMapping("/terms/{examTermId}/seats")
+    @PreAuthorize(ExamPerms.TEMPLATES_MANAGE)
+    public ResponseEntity<ApiResponse<String>> saveSeats(@PathVariable("examTermId") UUID examTermId,
+                                                         @RequestBody SaveSeatingRequest request) {
+        seatingService.saveSeats(examTermId, request);
+        return ResponseEntity.ok(ApiResponse.success("Seats saved", "Seats saved"));
     }
 
     /** Admit cards of a section, one page per student; students on hold are left out and counted in X-Admit-Cards-Withheld */

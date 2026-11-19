@@ -36,9 +36,17 @@ each subject of a class in a term.
   - the letterhead with "ADMIT CARD", the term name and academic session
   - the student's photo (from studentservice, read with the user's token; a "Paste photo" box when there is none)
   - name, student ID, roll number, class and section, date of birth, a card number (`<term>-<studentUid>`)
+  - the **room** of the class for the exam ("To be announced" when none is set) and the student's **seat number** (the
+    roll number unless a seat was set by hand), from Exam & Assessment → Date sheet & admit cards → **Seating**
+    (`exam_term_rooms`, `exam_seats`; `GET /api/v1/exams/terms/{id}/seating?sectionId=`, `PUT …/sections/{sectionId}/room`,
+    `PUT …/seats`; `exam.templates.manage` to change, `exam.terms.view` to read)
   - the date sheet: date, day, time, subject code, subject, maximum marks (papers without a date show "To be
     announced")
-  - general instructions and signature lines for the student, class teacher and principal
+  - the instructions: the school's own from Settings → General → **Instructions** (one per line, up to 8 lines of 200
+    characters; saved by `PUT /api/v1/tenants/{id}/school-profile/instructions`), or the standard five in
+    `AdmitCardPdfWriter.INSTRUCTIONS` when the school has set none; read by examservice with the school profile
+    (`SchoolProfile.instructionLines()`)
+  - signature lines for the student, class teacher and principal (or exam controller), and the QR verification block
 
 ## Steps
 
@@ -65,5 +73,7 @@ each subject of a class in a term.
 
 - Done 18 Nov 2026: the staff web app (student profile → Academics → **Admit cards**) and the parent app (Exam
   schedule → **Download Hall Ticket (PDF)**, the card for the next exam; shared on the phone, downloaded on web).
-- Exam **centre / room and seat number** on the card: no data for them yet.
-- Instructions are fixed text in `AdmitCardPdfWriter.INSTRUCTIONS`; a per-school setting would let schools edit them.
+- Done 19 Nov 2026: the exam **room and seat number** on the card (Seating on the Date sheet & admit cards tab; the
+  room is per class and exam, the seat per student and exam, blank meaning the roll number) and the school's own
+  **instructions** (Settings → General → Instructions). Open: seat numbers are not checked for duplicates across
+  students.

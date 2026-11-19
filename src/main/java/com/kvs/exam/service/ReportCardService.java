@@ -102,7 +102,7 @@ public class ReportCardService {
         if (documentRegistry == null) return cards;
         List<ReportCardPdfWriter.Card> published = cards.stream().filter(c -> c.data().isPublished()).toList();
         if (published.isEmpty()) return cards;
-        List<String> codes = documentRegistry.codes(published.stream().map(c -> {
+        List<Verification> codes = documentRegistry.verifications(published.stream().map(c -> {
             ProgressCardResponse d = c.data();
             return new DocumentRegistry.Issue(tenantId, "REPORT_CARD", d.getAcademicYear() + "/" + d.getTermName() + "/" + d.getStudentUid(),
                     "Report card, " + d.getTermName(), d.getStudentName(), List.of(
@@ -113,10 +113,10 @@ public class ReportCardService {
                     new DocumentRegistry.Fact("Grade", d.getGrade() == null ? "-" : d.getGrade()),
                     new DocumentRegistry.Fact("Result", ReportCardPdfWriter.resultText(d.getResult()))));
         }).toList());
-        java.util.Map<ReportCardPdfWriter.Card, String> byCard = new java.util.IdentityHashMap<>();
+        java.util.Map<ReportCardPdfWriter.Card, Verification> byCard = new java.util.IdentityHashMap<>();
         for (int i = 0; i < published.size(); i++) byCard.put(published.get(i), codes.get(i));
         return cards.stream().map(c -> byCard.containsKey(c)
-                ? new ReportCardPdfWriter.Card(c.data(), c.photo(), Verification.of(documentRegistry, byCard.get(c)), c.classTeacher())
+                ? new ReportCardPdfWriter.Card(c.data(), c.photo(), byCard.get(c), c.classTeacher())
                 : c).toList();
     }
 }

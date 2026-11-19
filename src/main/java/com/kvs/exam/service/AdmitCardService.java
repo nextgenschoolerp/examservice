@@ -45,6 +45,7 @@ public class AdmitCardService {
     @Autowired private StudentPhotoClient photos;
     @Autowired private AdmitCardPdfWriter writer;
     @Autowired private ClassTeacherSignatureClient classTeachers;
+    @Autowired private SeatingService seating;
     @Autowired(required = false) private DocumentRegistry documentRegistry;
 
     @Value("${kvs.school.name:School}") private String schoolName;
@@ -142,22 +143,26 @@ public class AdmitCardService {
         String prefix = AdmitCardPdfWriter.termCode(term.getTermName());
         // one verification code per student's admit card: the same on every download while the card's facts stay the same
         String dates = (term.getStartDate() == null ? "" : term.getStartDate().toString()) + " to " + (term.getEndDate() == null ? "" : term.getEndDate().toString());
-        List<String> codes = documentRegistry == null ? java.util.Collections.nCopies(students.size(), null)
-                : documentRegistry.codes(students.stream().map(s -> new DocumentRegistry.Issue(term.getTenantId(), "ADMIT_CARD",
+        List<Verification> codes = documentRegistry == null ? java.util.Collections.nCopies(students.size(), null)
+                : documentRegistry.verifications(students.stream().map(s -> new DocumentRegistry.Issue(term.getTenantId(), "ADMIT_CARD",
                 session + "/" + term.getTermName() + "/" + s.getStudentUid(), "Admit card, " + term.getTermName(), name(s), List.of(
                 new DocumentRegistry.Fact("Card number", prefix + "-" + s.getStudentUid()),
                 new DocumentRegistry.Fact("Examination", term.getTermName() + (session.isBlank() ? "" : ", " + session)),
                 new DocumentRegistry.Fact("Class", access.className(section)),
                 new DocumentRegistry.Fact("Roll number", s.getRollNumber() == null ? "-" : String.valueOf(s.getRollNumber())),
                 new DocumentRegistry.Fact("Exam dates", dates)))).toList());
+        String room = seating.roomOf(term.getExamTermId(), section.getSectionId());
+        java.util.Map<UUID, String> seatsByHand = seating.seatsOf(term.getExamTermId());
         List<AdmitCardPdfWriter.Card> cards = new java.util.ArrayList<>();
         for (int i = 0; i < students.size(); i++) {
             StudentMaster s = students.get(i);
             cards.add(new AdmitCardPdfWriter.Card(prefix + "-" + s.getStudentUid(), name(s), s.getStudentUid(), s.getRollNumber(),
                     s.getDateOfBirth(), s.getProfilePhotoUrl() == null ? null : photos.photo(s.getStudentId()),
-                    Verification.of(documentRegistry, codes.get(i))));
+                    codes.get(i), room, SeatingService.effectiveSeat(seatsByHand.get(s.getStudentId()), s.getRollNumber())));
         }
-        return writer.write(SchoolLetterhead.from(profile), exam, papers, cards, Instant.now(), ZoneId.of(timeZone));
+        List<String> instructions = profile.instructionLines();
+        return writer.write(SchoolLetterhead.from(profile), exam, papers, cards, Instant.now(), ZoneId.of(timeZone),
+                instructions.isEmpty() ? AdmitCardPdfWriter.INSTRUCTIONS : instructions);
     }
 
     private static String name(StudentMaster s) {

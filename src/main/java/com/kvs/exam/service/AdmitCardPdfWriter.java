@@ -42,11 +42,16 @@ public class AdmitCardPdfWriter {
     /** One paper of the date sheet; date and times may be null (not scheduled yet) */
     public record Paper(String subjectCode, String subjectName, BigDecimal maxMarks, LocalDate date, LocalTime start, LocalTime end) { }
 
-    /** One student's card */
+    /** One student's card; {@code room} is null when none is set, {@code seat} the seat (the roll number by default) */
     public record Card(String cardNumber, String studentName, String studentUid, Integer rollNumber, LocalDate dateOfBirth, byte[] photo,
-                       Verification verify) {
+                       Verification verify, String room, String seat) {
         public Card(String cardNumber, String studentName, String studentUid, Integer rollNumber, LocalDate dateOfBirth, byte[] photo) {
-            this(cardNumber, studentName, studentUid, rollNumber, dateOfBirth, photo, null);
+            this(cardNumber, studentName, studentUid, rollNumber, dateOfBirth, photo, null, null, null);
+        }
+
+        public Card(String cardNumber, String studentName, String studentUid, Integer rollNumber, LocalDate dateOfBirth, byte[] photo,
+                    Verification verify) {
+            this(cardNumber, studentName, studentUid, rollNumber, dateOfBirth, photo, verify, null, null);
         }
     }
 
@@ -62,10 +67,17 @@ public class AdmitCardPdfWriter {
     private static final float ROW = 20;
 
     public byte[] write(SchoolLetterhead school, Exam exam, List<Paper> papers, List<Card> cards, Instant generatedAt, ZoneId zone) {
+        return write(school, exam, papers, cards, generatedAt, zone, INSTRUCTIONS);
+    }
+
+    /** The card with the school's own instructions (one per line); the standard ones when the list is empty */
+    public byte[] write(SchoolLetterhead school, Exam exam, List<Paper> papers, List<Card> cards, Instant generatedAt, ZoneId zone,
+                        List<String> instructions) {
+        List<String> lines = instructions == null || instructions.isEmpty() ? INSTRUCTIONS : instructions;
         PdfDocument pdf = new PdfDocument();
         for (int i = 0; i < cards.size(); i++) {
             if (i > 0) pdf.newPage();
-            card(pdf, school, exam, papers, cards.get(i));
+            card(pdf, school, exam, papers, cards.get(i), lines);
         }
         String generated = "Generated " + WHEN.format(generatedAt.atZone(zone));
         for (int p = 1; p <= pdf.pageCount(); p++) {
@@ -76,7 +88,7 @@ public class AdmitCardPdfWriter {
         return pdf.toBytes();
     }
 
-    private void card(PdfDocument pdf, SchoolLetterhead school, Exam exam, List<Paper> papers, Card c) {
+    private void card(PdfDocument pdf, SchoolLetterhead school, Exam exam, List<Paper> papers, Card c, List<String> lines) {
         float y = school.draw(pdf, "ADMIT CARD", exam.sessionName() == null || exam.sessionName().isBlank() ? null : "Academic year " + exam.sessionName());
 
         // --- summary band
@@ -103,7 +115,9 @@ public class AdmitCardPdfWriter {
                 {"Student ID", c.studentUid()},
                 {"Roll number", c.rollNumber() == null ? "-" : String.valueOf(c.rollNumber())},
                 {"Class & section", exam.className()},
-                {"Date of birth", c.dateOfBirth() == null ? "-" : DAY.format(c.dateOfBirth())}};
+                {"Date of birth", c.dateOfBirth() == null ? "-" : DAY.format(c.dateOfBirth())},
+                {"Room", c.room() == null ? "To be announced" : c.room()},
+                {"Seat number", c.seat() == null ? "-" : c.seat()}};
         for (String[] r : rows) {
             pdf.text(Font.REGULAR, 9, MUTED, LEFT, ry, r[0]);
             pdf.text(Font.BOLD, r[0].equals("Name") ? 12 : 10, INK, LEFT + 95, ry,
@@ -151,9 +165,9 @@ public class AdmitCardPdfWriter {
         // --- instructions
         pdf.text(Font.BOLD, 8, BRAND, LEFT, y, "INSTRUCTIONS");
         y += 16;
-        for (int i = 0; i < INSTRUCTIONS.size(); i++) {
+        for (int i = 0; i < lines.size(); i++) {
             pdf.text(Font.REGULAR, 8.5f, MUTED, LEFT, y, (i + 1) + ".");
-            y = pdf.paragraph(Font.REGULAR, 8.5f, INK, LEFT + 14, y, RIGHT - LEFT - 14, 11, 2, INSTRUCTIONS.get(i)) + 3;
+            y = pdf.paragraph(Font.REGULAR, 8.5f, INK, LEFT + 14, y, RIGHT - LEFT - 14, 11, 2, lines.get(i)) + 3;
         }
 
         // --- signatures, near the bottom

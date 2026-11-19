@@ -39,7 +39,7 @@ class AdmitCardPdfWriterTest {
     @Test
     void printsOneCardPerStudentWithTheDateSheet() throws Exception {
         byte[] pdf = new AdmitCardPdfWriter().write(SCHOOL, EXAM, PAPERS, List.of(
-                new AdmitCardPdfWriter.Card("PT2-STU-2024-0142", "Aarav Sharma", "STU-2024-0142", 14, LocalDate.of(2013, 8, 2), photo(), new com.kvs.verify.Verification("DPS-7F3K-92QA", "https://erp.dps.edu.in/verify/DPS-7F3K-92QA", "erp.dps.edu.in/verify")),
+                new AdmitCardPdfWriter.Card("PT2-STU-2024-0142", "Aarav Sharma", "STU-2024-0142", 14, LocalDate.of(2013, 8, 2), photo(), new com.kvs.verify.Verification("DPS-7F3K-92QA", "https://erp.dps.edu.in/verify/DPS-7F3K-92QA", "erp.dps.edu.in/verify"), "Hall A", "A-14"),
                 new AdmitCardPdfWriter.Card("PT2-STU-2024-0150", "Diya Verma", "STU-2024-0150", 15, null, null)),
                 Instant.parse("2026-11-18T06:30:00Z"), ZoneId.of("Asia/Kolkata"));
         String text = new String(pdf, StandardCharsets.ISO_8859_1);
