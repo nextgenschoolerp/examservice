@@ -1,8 +1,11 @@
 package com.kvs.exam.service;
 
+import com.kvs.verify.Verification;
+import com.kvs.verify.VerificationBlock;
 import com.kvs.core.pdf.PdfDocument;
 import com.kvs.core.pdf.PdfDocument.Font;
 import com.kvs.core.pdf.SchoolLetterhead;
+import com.kvs.core.school.SchoolProfile;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -29,13 +32,23 @@ public class AdmitCardPdfWriter {
     private static final DateTimeFormatter WHEN = DateTimeFormatter.ofPattern("dd MMM yyyy, hh:mm a", Locale.ENGLISH);
 
     /** The exam the cards are for */
-    public record Exam(String termName, String sessionName, String className, LocalDate startDate, LocalDate endDate) { }
+    public record Exam(String termName, String sessionName, String className, LocalDate startDate, LocalDate endDate,
+                       SchoolProfile.Signatory classTeacher) {
+        public Exam(String termName, String sessionName, String className, LocalDate startDate, LocalDate endDate) {
+            this(termName, sessionName, className, startDate, endDate, null);
+        }
+    }
 
     /** One paper of the date sheet; date and times may be null (not scheduled yet) */
     public record Paper(String subjectCode, String subjectName, BigDecimal maxMarks, LocalDate date, LocalTime start, LocalTime end) { }
 
     /** One student's card */
-    public record Card(String cardNumber, String studentName, String studentUid, Integer rollNumber, LocalDate dateOfBirth, byte[] photo) { }
+    public record Card(String cardNumber, String studentName, String studentUid, Integer rollNumber, LocalDate dateOfBirth, byte[] photo,
+                       Verification verify) {
+        public Card(String cardNumber, String studentName, String studentUid, Integer rollNumber, LocalDate dateOfBirth, byte[] photo) {
+            this(cardNumber, studentName, studentUid, rollNumber, dateOfBirth, photo, null);
+        }
+    }
 
     static final List<String> INSTRUCTIONS = List.of(
             "Bring this admit card to every paper. It may be checked at the entrance to the examination hall.",
@@ -144,14 +157,19 @@ public class AdmitCardPdfWriter {
         }
 
         // --- signatures, near the bottom
-        float sig = Math.max(y + 40, PdfDocument.HEIGHT - 110);
+        // the student signs by hand; the class teacher's signature from hrservice; the exam controller (else the
+        // principal) from Settings > Signatures
+        // signatures above the verification QR code at the bottom of the page
+        float sig = Math.max(y + 46, PdfDocument.HEIGHT - 158);
         float w = (RIGHT - LEFT - 40) / 3;
-        String[] who = {"Student", "Class teacher", "Principal"};
-        for (int i = 0; i < who.length; i++) {
-            float x = LEFT + i * (w + 20);
-            pdf.line(INK, 0.6f, x, sig, x + w, sig);
-            pdf.textCentre(Font.BOLD, 8.5f, INK, x + w / 2, sig + 13, who[i] + "'s signature");
+        SchoolLetterhead.signLine(pdf, "Student's signature", LEFT, sig, w);
+        SchoolLetterhead.signedBy(pdf, exam.classTeacher(), "Class teacher's signature", LEFT + w + 20, sig, w);
+        if (school.hasSignatory(SchoolProfile.EXAMS)) {
+            school.signature(pdf, SchoolProfile.EXAMS, "Controller of examinations", LEFT + 2 * (w + 20), sig, w);
+        } else {
+            school.signature(pdf, SchoolProfile.PRINCIPAL, "Principal's signature", LEFT + 2 * (w + 20), sig, w);
         }
+        VerificationBlock.draw(pdf, c.verify());
     }
 
     /** "PT2" for "Periodic Test 2", "HY" for "Half-Yearly": the card-number prefix */

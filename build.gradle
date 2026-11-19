@@ -46,6 +46,8 @@ dependencies {
     implementation 'io.micrometer:micrometer-observation'
     implementation 'io.micrometer:micrometer-tracing-bridge-brave'
     implementation 'com.kvs.core:ms-core:1.0.0-SNAPSHOT'
+    // QR code and verification code on printed documents (coreservice ms-verify)
+    implementation 'com.kvs.core:ms-verify:1.0.0-SNAPSHOT'
 
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'

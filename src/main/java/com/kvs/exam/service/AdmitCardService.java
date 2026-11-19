@@ -1,8 +1,10 @@
 package com.kvs.exam.service;
 
+import com.kvs.verify.Verification;
 import com.kvs.core.exception.BadRequestException;
 import com.kvs.core.exception.ConflictException;
 import com.kvs.core.pdf.SchoolLetterhead;
+import com.kvs.verify.DocumentRegistry;
 import com.kvs.core.school.SchoolProfile;
 import com.kvs.core.school.SchoolProfileClient;
 import com.kvs.exam.dto.StudentDateSheetResponse;
@@ -42,6 +44,8 @@ public class AdmitCardService {
     @Autowired private SchoolProfileClient schoolProfiles;
     @Autowired private StudentPhotoClient photos;
     @Autowired private AdmitCardPdfWriter writer;
+    @Autowired private ClassTeacherSignatureClient classTeachers;
+    @Autowired(required = false) private DocumentRegistry documentRegistry;
 
     @Value("${kvs.school.name:School}") private String schoolName;
     @Value("${kvs.time-zone:Asia/Kolkata}") private String timeZone;
@@ -132,13 +136,27 @@ public class AdmitCardService {
         SchoolProfile profile = schoolProfiles.getOr(term.getTenantId(), SchoolProfile.named(schoolName));
         String session = sessionRepository.findById(term.getAcademicYearId()).map(AcademicSession::getSessionName).orElse("");
         AdmitCardPdfWriter.Exam exam = new AdmitCardPdfWriter.Exam(term.getTermName(), session, access.className(section),
-                term.getStartDate(), term.getEndDate());
+                term.getStartDate(), term.getEndDate(), classTeachers.forSection(section, term.getTenantId()));
         List<AdmitCardPdfWriter.Paper> papers = subjects.stream().map(s -> new AdmitCardPdfWriter.Paper(s.getSubjectCode(),
                 s.getSubjectName(), s.getMaxMarks(), s.getExamDate(), s.getStartTime(), s.getEndTime())).toList();
         String prefix = AdmitCardPdfWriter.termCode(term.getTermName());
-        List<AdmitCardPdfWriter.Card> cards = students.stream().map(s -> new AdmitCardPdfWriter.Card(prefix + "-" + s.getStudentUid(),
-                name(s), s.getStudentUid(), s.getRollNumber(), s.getDateOfBirth(),
-                s.getProfilePhotoUrl() == null ? null : photos.photo(s.getStudentId()))).toList();
+        // one verification code per student's admit card: the same on every download while the card's facts stay the same
+        String dates = (term.getStartDate() == null ? "" : term.getStartDate().toString()) + " to " + (term.getEndDate() == null ? "" : term.getEndDate().toString());
+        List<String> codes = documentRegistry == null ? java.util.Collections.nCopies(students.size(), null)
+                : documentRegistry.codes(students.stream().map(s -> new DocumentRegistry.Issue(term.getTenantId(), "ADMIT_CARD",
+                session + "/" + term.getTermName() + "/" + s.getStudentUid(), "Admit card, " + term.getTermName(), name(s), List.of(
+                new DocumentRegistry.Fact("Card number", prefix + "-" + s.getStudentUid()),
+                new DocumentRegistry.Fact("Examination", term.getTermName() + (session.isBlank() ? "" : ", " + session)),
+                new DocumentRegistry.Fact("Class", access.className(section)),
+                new DocumentRegistry.Fact("Roll number", s.getRollNumber() == null ? "-" : String.valueOf(s.getRollNumber())),
+                new DocumentRegistry.Fact("Exam dates", dates)))).toList());
+        List<AdmitCardPdfWriter.Card> cards = new java.util.ArrayList<>();
+        for (int i = 0; i < students.size(); i++) {
+            StudentMaster s = students.get(i);
+            cards.add(new AdmitCardPdfWriter.Card(prefix + "-" + s.getStudentUid(), name(s), s.getStudentUid(), s.getRollNumber(),
+                    s.getDateOfBirth(), s.getProfilePhotoUrl() == null ? null : photos.photo(s.getStudentId()),
+                    Verification.of(documentRegistry, codes.get(i))));
+        }
         return writer.write(SchoolLetterhead.from(profile), exam, papers, cards, Instant.now(), ZoneId.of(timeZone));
     }
 

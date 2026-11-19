@@ -1,7 +1,9 @@
 package com.kvs.exam.service;
 
+import com.kvs.verify.Verification;
 import com.kvs.core.exception.BadRequestException;
 import com.kvs.core.pdf.SchoolLetterhead;
+import com.kvs.verify.DocumentRegistry;
 import com.kvs.core.school.SchoolProfile;
 import com.kvs.core.school.SchoolProfileClient;
 import com.kvs.exam.dto.ProgressCardResponse;
@@ -37,6 +39,8 @@ public class ReportCardService {
     @Autowired private SchoolProfileClient schoolProfiles;
     @Autowired private StudentPhotoClient photos;
     @Autowired private ReportCardPdfWriter writer;
+    @Autowired private ClassTeacherSignatureClient classTeachers;
+    @Autowired(required = false) private DocumentRegistry documentRegistry;
 
     @Value("${kvs.school.name:School}") private String schoolName;
     @Value("${kvs.time-zone:Asia/Kolkata}") private String timeZone;
@@ -45,7 +49,8 @@ public class ReportCardService {
     public ReportCards forStudent(UUID examTermId, UUID studentId) {
         ProgressCardResponse card = results.progressCard(studentId, examTermId);
         StudentMaster student = access.student(studentId);
-        byte[] pdf = render(student.getTenantId(), List.of(new ReportCardPdfWriter.Card(card, photo(student))));
+        com.kvs.core.school.SchoolProfile.Signatory teacher = classTeacher(examTermId, student);
+        byte[] pdf = render(student.getTenantId(), List.of(new ReportCardPdfWriter.Card(card, photo(student), null, teacher)));
         return new ReportCards(pdf, "Report-card-" + AdmitCardPdfWriter.termCode(card.getTermName()) + "-" + card.getStudentUid() + ".pdf", 1);
     }
 
@@ -61,11 +66,22 @@ public class ReportCardService {
         if (roster.isEmpty()) {
             throw new BadRequestException(access.className(section) + " has no students");
         }
+        com.kvs.core.school.SchoolProfile.Signatory teacher = classTeachers.forSection(section, term.getTenantId());
         List<ReportCardPdfWriter.Card> cards = roster.stream()
-                .map(s -> new ReportCardPdfWriter.Card(results.progressCard(s.getStudentId(), examTermId), photo(s))).toList();
+                .map(s -> new ReportCardPdfWriter.Card(results.progressCard(s.getStudentId(), examTermId), photo(s), null, teacher)).toList();
         byte[] pdf = render(term.getTenantId(), cards);
         return new ReportCards(pdf, "Report-cards-" + AdmitCardPdfWriter.termCode(term.getTermName()) + "-"
                 + access.className(section).replace(' ', '-') + ".pdf", cards.size());
+    }
+
+    /** The class teacher of the student's section in that term, or null when it cannot be worked out */
+    private com.kvs.core.school.SchoolProfile.Signatory classTeacher(UUID examTermId, StudentMaster student) {
+        try {
+            ExamTerm term = access.term(examTermId);
+            return classTeachers.forSection(access.sectionFor(student, term), term.getTenantId());
+        } catch (RuntimeException e) {
+            return null;
+        }
     }
 
     private byte[] photo(StudentMaster s) {
@@ -74,6 +90,33 @@ public class ReportCardService {
 
     private byte[] render(String tenantId, List<ReportCardPdfWriter.Card> cards) {
         SchoolProfile profile = schoolProfiles.getOr(tenantId, SchoolProfile.named(schoolName));
-        return writer.write(SchoolLetterhead.from(profile), cards, Instant.now(), ZoneId.of(timeZone));
+        return writer.write(SchoolLetterhead.from(profile), verified(tenantId, cards), Instant.now(), ZoneId.of(timeZone));
+    }
+
+    /**
+     * Verification codes for the published cards (a DRAFT gets none): one code per student and term, the same on every
+     * download; when results are corrected and republished the facts differ, so the card gets a new code and the old
+     * one reads "replaced by a newer version".
+     */
+    private List<ReportCardPdfWriter.Card> verified(String tenantId, List<ReportCardPdfWriter.Card> cards) {
+        if (documentRegistry == null) return cards;
+        List<ReportCardPdfWriter.Card> published = cards.stream().filter(c -> c.data().isPublished()).toList();
+        if (published.isEmpty()) return cards;
+        List<String> codes = documentRegistry.codes(published.stream().map(c -> {
+            ProgressCardResponse d = c.data();
+            return new DocumentRegistry.Issue(tenantId, "REPORT_CARD", d.getAcademicYear() + "/" + d.getTermName() + "/" + d.getStudentUid(),
+                    "Report card, " + d.getTermName(), d.getStudentName(), List.of(
+                    new DocumentRegistry.Fact("Examination", d.getTermName() + ", " + d.getAcademicYear()),
+                    new DocumentRegistry.Fact("Class", d.getClassName()),
+                    new DocumentRegistry.Fact("Marks", ReportCardPdfWriter.num(d.getTotalObtained()) + " of " + ReportCardPdfWriter.num(d.getTotalMax())),
+                    new DocumentRegistry.Fact("Percentage", ReportCardPdfWriter.pct(d.getPercentage())),
+                    new DocumentRegistry.Fact("Grade", d.getGrade() == null ? "-" : d.getGrade()),
+                    new DocumentRegistry.Fact("Result", ReportCardPdfWriter.resultText(d.getResult()))));
+        }).toList());
+        java.util.Map<ReportCardPdfWriter.Card, String> byCard = new java.util.IdentityHashMap<>();
+        for (int i = 0; i < published.size(); i++) byCard.put(published.get(i), codes.get(i));
+        return cards.stream().map(c -> byCard.containsKey(c)
+                ? new ReportCardPdfWriter.Card(c.data(), c.photo(), Verification.of(documentRegistry, byCard.get(c)), c.classTeacher())
+                : c).toList();
     }
 }

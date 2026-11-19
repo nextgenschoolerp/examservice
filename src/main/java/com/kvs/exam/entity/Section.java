@@ -28,6 +28,13 @@ public class Section extends BaseAuditEntity {
     @Column(name = "section_name", nullable = false, length = 10)
     private String sectionName;
 
+    /** The class teacher (hrservice staff_profiles.staff_id), set by studentservice; signs report cards and admit cards */
+    @Column(name = "class_teacher_id")
+    private UUID classTeacherId;
+
+    @Column(name = "class_teacher_name", length = 150)
+    private String classTeacherName;
+
     @Column(name = "max_capacity")
     @Builder.Default
     private Integer maxCapacity = 40;

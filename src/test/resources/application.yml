@@ -44,3 +44,4 @@ kvs:
     authservice-url: http://127.0.0.1:9/authservice
   integrations:
     student-url: http://127.0.0.1:9/studentservice
+    hr-url: http://127.0.0.1:9/hrservice

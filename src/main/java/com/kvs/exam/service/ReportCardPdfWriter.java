@@ -1,9 +1,12 @@
 package com.kvs.exam.service;
 
+import com.kvs.verify.Verification;
+import com.kvs.verify.VerificationBlock;
 import com.kvs.core.pdf.PdfDocument;
 import com.kvs.core.pdf.PdfDocument.Font;
 import com.kvs.core.pdf.PdfDocument.Rgb;
 import com.kvs.core.pdf.SchoolLetterhead;
+import com.kvs.core.school.SchoolProfile;
 import com.kvs.exam.dto.CoScholasticResponse;
 import com.kvs.exam.dto.ProgressCardResponse;
 import org.springframework.stereotype.Component;
@@ -32,11 +35,20 @@ public class ReportCardPdfWriter {
     private static final Rgb DRAFT = new Rgb(232, 232, 240);
 
     /** One student's card: the progress card data and the photo (null: an empty photo box) */
-    public record Card(ProgressCardResponse data, byte[] photo) { }
+    public record Card(ProgressCardResponse data, byte[] photo, Verification verify,
+                       SchoolProfile.Signatory classTeacher) {
+        public Card(ProgressCardResponse data, byte[] photo) {
+            this(data, photo, null, null);
+        }
+
+        public Card(ProgressCardResponse data, byte[] photo, Verification verify) {
+            this(data, photo, verify, null);
+        }
+    }
 
     private static final float ROW = 19;
     /** Lowest y a table row may reach before continuing on a new page (room for the signatures) */
-    private static final float LIMIT = PdfDocument.HEIGHT - 150;
+    private static final float LIMIT = PdfDocument.HEIGHT - 190;
     private static final float C_SUBJECT = LEFT + 10, C_MAX = LEFT + 270, C_OBT = LEFT + 340, C_PCT = LEFT + 410, C_GRADE = RIGHT - 10;
 
     public byte[] write(SchoolLetterhead school, List<Card> cards, Instant generatedAt, ZoneId zone) {
@@ -60,6 +72,8 @@ public class ReportCardPdfWriter {
         private final SchoolLetterhead school;
         private final ProgressCardResponse c;
         private final byte[] photo;
+        private final Verification verify;
+        private final SchoolProfile.Signatory classTeacher;
         private final List<String> footers;
         private final String footer;
         private float y;
@@ -69,6 +83,8 @@ public class ReportCardPdfWriter {
             this.school = school;
             this.c = card.data();
             this.photo = card.photo();
+            this.verify = card.verify();
+            this.classTeacher = card.classTeacher();
             this.footers = footers;
             this.footer = "Report card  |  " + nz(c.getTermName()) + "  |  " + nz(c.getStudentUid()) + "  |  " + generated;
         }
@@ -222,18 +238,18 @@ public class ReportCardPdfWriter {
         }
 
         private void signatures() {
-            float sig = Math.max(y + 46, PdfDocument.HEIGHT - 110);
-            if (sig > PdfDocument.HEIGHT - 80) {
+            // signatures above the verification QR code at the bottom of the last page
+            float sig = Math.max(y + 46, PdfDocument.HEIGHT - 158);
+            if (sig > PdfDocument.HEIGHT - 158) {
                 newPage();
-                sig = PdfDocument.HEIGHT - 110;
+                sig = PdfDocument.HEIGHT - 158;
             }
+            // the class teacher's signature from hrservice, the principal's from Settings > Signatures; the parent signs by hand
             float w = (RIGHT - LEFT - 40) / 3;
-            String[] who = {"Class teacher", "Principal", "Parent / guardian"};
-            for (int i = 0; i < who.length; i++) {
-                float x = LEFT + i * (w + 20);
-                pdf.line(INK, 0.6f, x, sig, x + w, sig);
-                pdf.textCentre(Font.BOLD, 8.5f, INK, x + w / 2, sig + 13, who[i]);
-            }
+            SchoolLetterhead.signedBy(pdf, classTeacher, "Class teacher", LEFT, sig, w);
+            school.signature(pdf, SchoolProfile.PRINCIPAL, "Principal", LEFT + w + 20, sig, w);
+            SchoolLetterhead.signLine(pdf, "Parent / guardian", LEFT + 2 * (w + 20), sig, w);
+            VerificationBlock.draw(pdf, verify);
         }
     }
 
