@@ -10,6 +10,7 @@ import com.kvs.exam.dto.ExamSubjectResponse;
 import com.kvs.exam.dto.ExamTermResponse;
 import com.kvs.exam.dto.GradingScaleResponse;
 import com.kvs.exam.dto.SaveDateSheetRequest;
+import com.kvs.exam.dto.UpdateExamTermDatesRequest;
 import com.kvs.exam.entity.AcademicSession;
 import com.kvs.exam.entity.AssessmentTemplate;
 import com.kvs.exam.entity.ExamSubject;
@@ -183,6 +184,34 @@ public class ExamSetupService {
                 .build());
         auditService.logSuccess("exam-term:" + term.getExamTermId(), "EXAM_TERM_CREATED",
                 name + " (" + term.getTermType() + ", " + term.getWeightagePercent() + "%) in " + session.getSessionName()
+                        + ", T_lock " + term.getMarkEntryDeadline());
+        return toResponse(term);
+    }
+
+    /**
+     * Changes the dates of an existing term (start, end, T_lock). The same checks as creating the term apply: the end is
+     * not before the start, the term falls within its academic year, and marks close after the term starts.
+     */
+    public ExamTermResponse updateTermDates(UUID examTermId, UpdateExamTermDatesRequest request) {
+        ExamTerm term = access.term(examTermId);
+        AcademicSession session = sessionRepository.findById(term.getAcademicYearId())
+                .orElseThrow(() -> new ResourceNotFoundException("AcademicSession", "academicYearId", term.getAcademicYearId()));
+        if (request.getEndDate().isBefore(request.getStartDate())) {
+            throw new BadRequestException("endDate must not be before startDate");
+        }
+        if (request.getStartDate().isBefore(session.getStartDate()) || request.getEndDate().isAfter(session.getEndDate())) {
+            throw new BadRequestException("The term must fall within the academic year " + session.getSessionName()
+                    + " (" + session.getStartDate() + " to " + session.getEndDate() + ")");
+        }
+        if (request.getMarkEntryDeadline().isBefore(request.getStartDate().atStartOfDay(java.time.ZoneOffset.UTC).toInstant())) {
+            throw new BadRequestException("markEntryDeadline must not be before the term starts");
+        }
+        term.setStartDate(request.getStartDate());
+        term.setEndDate(request.getEndDate());
+        term.setMarkEntryDeadline(request.getMarkEntryDeadline());
+        termRepository.save(term);
+        auditService.logSuccess("exam-term:" + term.getExamTermId(), "EXAM_TERM_DATES_CHANGED",
+                term.getTermName() + " in " + session.getSessionName() + ": " + term.getStartDate() + " to " + term.getEndDate()
                         + ", T_lock " + term.getMarkEntryDeadline());
         return toResponse(term);
     }

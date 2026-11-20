@@ -87,6 +87,14 @@ public class ExamController {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success("Exam term created", setupService.createTerm(request)));
     }
 
+    /** Changes the dates of an existing term (start, end, T_lock) */
+    @PutMapping("/terms/{examTermId}/dates")
+    @PreAuthorize(ExamPerms.TEMPLATES_MANAGE)
+    public ResponseEntity<ApiResponse<ExamTermResponse>> updateTermDates(@PathVariable("examTermId") UUID examTermId,
+                                                                         @Valid @RequestBody UpdateExamTermDatesRequest request) {
+        return ResponseEntity.ok(ApiResponse.success("Exam term dates saved", setupService.updateTermDates(examTermId, request)));
+    }
+
     @GetMapping("/terms")
     @PreAuthorize(ExamPerms.STUDENTS_VIEW)
     public ResponseEntity<ApiResponse<List<ExamTermResponse>>> listTerms(

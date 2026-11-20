@@ -38,6 +38,7 @@ class AccessRuleParityTest {
     /** Intended differences, reviewed: "METHOD path" → reason. Keep empty unless a change is deliberate. */
     private static final Map<String, String> ALLOWED_DIFFERENCES = Map.of(
             "PUT /api/v1/exams/terms/{examTermId}/date-sheet", "New (18 Nov 2026): date sheet, exam.templates.manage like the subject set-up",
+            "PUT /api/v1/exams/terms/{examTermId}/dates", "New (20 Nov 2026): change a term's dates, exam.templates.manage like creating a term",
             "GET /api/v1/exams/terms/{examTermId}/seating", "New (19 Nov 2026): seating of a class (room and seats), exam.terms.view like the admit cards",
             "PUT /api/v1/exams/terms/{examTermId}/sections/{sectionId}/room", "New (19 Nov 2026): room of a class, exam.templates.manage like the date sheet",
             "PUT /api/v1/exams/terms/{examTermId}/seats", "New (19 Nov 2026): seats set by hand, exam.templates.manage like the date sheet",

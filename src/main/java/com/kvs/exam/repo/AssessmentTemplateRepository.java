@@ -7,6 +7,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Repository
@@ -15,6 +16,9 @@ public interface AssessmentTemplateRepository extends JpaRepository<AssessmentTe
     /** The master templates and the school's own copies */
     @Query("select t from AssessmentTemplate t where t.tenantId is null or t.tenantId = :tenantId order by t.boardCode, t.tenantId nulls first, t.templateName")
     List<AssessmentTemplate> findVisible(@Param("tenantId") String tenantId);
+
+    /** The school's copy of a master template, if it already has one */
+    Optional<AssessmentTemplate> findFirstByTenantIdAndSourceTemplateId(String tenantId, UUID sourceTemplateId);
 
     boolean existsByTemplateCode(String templateCode);
 

@@ -63,6 +63,12 @@ public class AssessmentTemplateService {
     public AssessmentTemplateResponse copy(UUID templateId, String tenantId) {
         String tenant = access.tenantFor(tenantId);
         AssessmentTemplate source = visible(templateId, tenant);
+        // One copy per master: a second Edit or "Make our copy" returns the school's copy instead of adding another
+        UUID origin = source.isMaster() ? source.getTemplateId() : source.getSourceTemplateId();
+        if (origin != null) {
+            var existing = repository.findFirstByTenantIdAndSourceTemplateId(tenant, origin);
+            if (existing.isPresent()) return toResponse(existing.get());
+        }
         String base = source.getTemplateName().replaceAll(" \\(our copy( \\d+)?\\)$", "") + " (our copy)";
         String name = base;
         for (int n = 2; repository.existsByTenantIdAndTemplateNameIgnoreCase(tenant, name); n++) {
