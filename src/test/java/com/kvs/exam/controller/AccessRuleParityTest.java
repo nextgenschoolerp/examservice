@@ -36,7 +36,17 @@ class AccessRuleParityTest {
     private static final String RULES_PATH = "/api/v1/exam/access-rules";
 
     /** Intended differences, reviewed: "METHOD path" → reason. Keep empty unless a change is deliberate. */
-    private static final Map<String, String> ALLOWED_DIFFERENCES = Map.of();
+    private static final Map<String, String> ALLOWED_DIFFERENCES = Map.of(
+            "PUT /api/v1/exams/terms/{examTermId}/date-sheet", "New (18 Nov 2026): date sheet, exam.templates.manage like the subject set-up",
+            "PUT /api/v1/exams/terms/{examTermId}/dates", "New (20 Nov 2026): change a term's dates, exam.templates.manage like creating a term",
+            "GET /api/v1/exams/terms/{examTermId}/seating", "New (19 Nov 2026): seating of a class (room and seats), exam.terms.view like the admit cards",
+            "PUT /api/v1/exams/terms/{examTermId}/sections/{sectionId}/room", "New (19 Nov 2026): room of a class, exam.templates.manage like the date sheet",
+            "PUT /api/v1/exams/terms/{examTermId}/seats", "New (19 Nov 2026): seats set by hand, exam.templates.manage like the date sheet",
+            "GET /api/v1/exams/terms/{examTermId}/admit-cards", "New (18 Nov 2026): admit cards of a section, exam.terms.view like the broadsheet",
+            "GET /api/v1/exams/students/{studentId}/admit-card", "New (18 Nov 2026): one student's admit card, exam.students.view like the progress card",
+            "GET /api/v1/exams/students/{studentId}/date-sheet", "New (18 Nov 2026): one student's date sheet for the parent app, exam.students.view",
+            "GET /api/v1/exams/terms/{examTermId}/report-cards", "New (18 Nov 2026): report cards of a section, exam.terms.view like the broadsheet",
+            "GET /api/v1/exams/students/{studentId}/progress-card/pdf", "New (18 Nov 2026): one student's report card PDF, exam.students.view like the progress card");
 
     @Autowired private MockMvc mockMvc;
     @Autowired private JwtTokenService jwtTokenService;

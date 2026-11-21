@@ -39,3 +39,9 @@ kvs:
   access-rules:
     path: /api/v1/exam/access-rules
     base-package: com.kvs.exam
+  # No authservice or studentservice in tests: an address that refuses at once, so documents use their fallbacks
+  school-profile:
+    authservice-url: http://127.0.0.1:9/authservice
+  integrations:
+    student-url: http://127.0.0.1:9/studentservice
+    hr-url: http://127.0.0.1:9/hrservice

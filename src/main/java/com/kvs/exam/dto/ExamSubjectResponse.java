@@ -6,6 +6,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.UUID;
 
 /** A subject of a term for one class. */
@@ -24,4 +26,8 @@ public class ExamSubjectResponse {
     private BigDecimal maxMarks;
     private BigDecimal passMarks;
     private BigDecimal weightage;
+    /** Date sheet: date and time of the paper, null until scheduled */
+    private LocalDate examDate;
+    private LocalTime startTime;
+    private LocalTime endTime;
 }

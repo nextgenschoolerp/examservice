@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kvs.core.service.JwtTokenService;
 import com.kvs.exam.entity.AcademicSession;
+import com.kvs.exam.entity.ExamSubject;
 import com.kvs.exam.entity.Grade;
 import com.kvs.exam.entity.Section;
 import com.kvs.exam.entity.StudentMaster;
@@ -28,6 +29,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.*;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 /**
@@ -94,7 +96,7 @@ class ExamControllerIntegrationTest {
         subjectRepository.deleteAll();
         termRepository.deleteAll();
         scaleRepository.deleteAll();
-        studentRepository.deleteAll(List.of(asha, bilal, chitra));
+        studentRepository.deleteAllById(List.of(asha.getStudentId(), bilal.getStudentId(), chitra.getStudentId()));
         sectionRepository.delete(section);
         gradeRepository.delete(grade);
         sessionRepository.delete(session);
@@ -391,6 +393,44 @@ class ExamControllerIntegrationTest {
     }
 
     @Test
+    @DisplayName("Report card PDF: the progress card on the letterhead, DRAFT until published; parents only their own child once published; a section in one file")
+    void reportCardPdf() throws Exception {
+        String termId = term("Half-Yearly", 50, null);
+        fullMarks(termId);
+        putJson("/api/v1/exams/terms/" + termId + "/co-scholastic", token("CLASS_TEACHER"), Map.of("entries", List.of(
+                Map.of("studentId", asha.getStudentId(), "area", "ART_EDUCATION", "grade", "A+", "remarks", "Lovely watercolours"))))
+                .andExpect(status().isOk());
+        putJson("/api/v1/exams/students/" + asha.getStudentId() + "/progress-card/remarks", token("CLASS_TEACHER"),
+                Map.of("examTermId", termId, "remarks", "Asha works steadily and helps her classmates.")).andExpect(status().isOk());
+        String path = "/api/v1/exams/students/" + asha.getStudentId() + "/progress-card/pdf";
+
+        String draft = pdfText(getAs(path, token("EXAM_CONTROLLER"), "examTermId", termId).andExpect(status().isOk())
+                .andExpect(header().string("Content-Type", "application/pdf")).andExpect(header().string("X-Report-Cards", "1"))
+                .andExpect(header().string("Content-Disposition", org.hamcrest.Matchers.containsString("Report-card-HY-" + asha.getStudentUid() + ".pdf"))));
+        assertThat(draft).contains("REPORT CARD", "Asha Test", "Class 6-A", "English",
+                "Mathematics", "72", "76", "93.3%", "A1", "Pass", "Rank in section: 1 of 3",
+                "Grade point: 10", "CO-SCHOLASTIC AREAS", "A+", "Lovely watercolours", "Asha works steadily", "Parent / guardian",
+                "DRAFT");
+
+        // a parent: nothing before publishing (as on screen), then the card without DRAFT; never another family's child
+        String parent = token("APPLICANT_PARENT", TENANT, PARENT);
+        getAs(path, parent, "examTermId", termId).andExpect(status().isNotFound());
+        post("/api/v1/exams/terms/" + termId + "/publish", token("CLASS_TEACHER"), Map.of("sectionId", section.getSectionId())).andExpect(status().isOk());
+        String published = pdfText(getAs(path, parent, "examTermId", termId).andExpect(status().isOk()));
+        assertThat(published).contains("Asha Test").doesNotContain("DRAFT");
+        getAs("/api/v1/exams/students/" + bilal.getStudentId() + "/progress-card/pdf", parent, "examTermId", termId).andExpect(status().isNotFound());
+        getAs(path, parent).andExpect(status().isBadRequest());
+
+        // the section: one file, each student on their own page(s), by roll number; class teacher of the section may print it
+        String all = pdfText(getAs("/api/v1/exams/terms/" + termId + "/report-cards", token("CLASS_TEACHER"), "sectionId", section.getSectionId().toString())
+                .andExpect(status().isOk()).andExpect(header().string("X-Report-Cards", "3"))
+                .andExpect(header().string("Content-Disposition", org.hamcrest.Matchers.containsString("Report-cards-HY-Class-6-A.pdf"))));
+        assertThat(all).contains("Asha Test", "Bilal Test", "Chitra Test", "Needs support", "Page 3 of 3");
+        assertThat(all.indexOf("Asha Test")).isLessThan(all.indexOf("Bilal Test"));
+        getAs("/api/v1/exams/terms/" + termId + "/report-cards", token("EXAM_CONTROLLER")).andExpect(status().isBadRequest());
+    }
+
+    @Test
     @DisplayName("US-05013: progress trend across terms with change, weighted percentage and trend; parents only see published terms")
     void progressTrend() throws Exception {
         String t1 = term("Periodic Test 1", 20, null);
@@ -504,6 +544,174 @@ class ExamControllerIntegrationTest {
         } finally {
             studentRepository.delete(dev);
             sectionRepository.delete(other);
+        }
+    }
+
+    // ------------------------------------------------------------------ date sheet and admit cards
+
+    private String dateSheetPath(String termId) {
+        return "/api/v1/exams/terms/" + termId + "/date-sheet";
+    }
+
+    private static Map<String, Object> paper(String code, LocalDate date, String start, String end) {
+        Map<String, Object> e = new HashMap<>();
+        e.put("subjectCode", code);
+        e.put("examDate", date == null ? null : date.toString());
+        e.put("startTime", start);
+        e.put("endTime", end);
+        return e;
+    }
+
+    /** ENG on the term's 2nd day 09:30-12:30, MATH on the 3rd day without times */
+    private void schedule(String termId) throws Exception {
+        LocalDate start = session.getStartDate().plusDays(10);
+        putJson(dateSheetPath(termId), token("EXAM_CONTROLLER"), Map.of("gradeId", grade.getGradeId(), "entries", List.of(
+                paper("MATH", start.plusDays(2), null, null), paper("ENG", start.plusDays(1), "09:30", "12:30"))))
+                .andExpect(status().isOk());
+    }
+
+    /** Puts a student on hold (read fresh: the row's version moves on when other tests' requests touch it) */
+    private void hold(StudentMaster s, String reason) {
+        StudentMaster fresh = studentRepository.findById(s.getStudentId()).orElseThrow();
+        fresh.setIsOnHold(true);
+        fresh.setActiveHoldReason(reason);
+        studentRepository.save(fresh);
+    }
+
+    private static String pdfText(ResultActions r) throws Exception {
+        return extracted(r.andReturn().getResponse().getContentAsByteArray());
+    }
+
+    @Test
+    @DisplayName("Date sheet: saved per class and listed with the subjects; dates within the term, both times, end after start")
+    void dateSheet() throws Exception {
+        String termId = term("Periodic Test 2", 20, null);
+        LocalDate start = session.getStartDate().plusDays(10);
+        schedule(termId);
+
+        JsonNode subjects = data(getAs("/api/v1/exams/terms/" + termId + "/subjects", token("EXAM_CONTROLLER"), "gradeId", grade.getGradeId().toString())
+                .andExpect(status().isOk()));
+        JsonNode eng = subjects.get(0).path("subjectCode").asText().equals("ENG") ? subjects.get(0) : subjects.get(1);
+        JsonNode math = eng == subjects.get(0) ? subjects.get(1) : subjects.get(0);
+        assertThat(eng.path("examDate").asText()).isEqualTo(start.plusDays(1).toString());
+        assertThat(eng.path("startTime").asText()).startsWith("09:30");
+        assertThat(eng.path("endTime").asText()).startsWith("12:30");
+        assertThat(math.path("examDate").asText()).isEqualTo(start.plusDays(2).toString());
+        assertThat(math.path("startTime").isNull()).isTrue();
+
+        String exam = token("EXAM_CONTROLLER");
+        Object g = grade.getGradeId();
+        putJson(dateSheetPath(termId), exam, Map.of("gradeId", g, "entries", List.of(paper("ENG", start.minusDays(1), null, null))))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("within")));
+        putJson(dateSheetPath(termId), exam, Map.of("gradeId", g, "entries", List.of(paper("ENG", start, "09:30", null))))
+                .andExpect(status().isBadRequest());
+        putJson(dateSheetPath(termId), exam, Map.of("gradeId", g, "entries", List.of(paper("ENG", start, "12:00", "09:00"))))
+                .andExpect(status().isBadRequest());
+        putJson(dateSheetPath(termId), exam, Map.of("gradeId", g, "entries", List.of(paper("SCI", start, null, null))))
+                .andExpect(status().isBadRequest());
+        putJson(dateSheetPath(termId), exam, Map.of("gradeId", g, "entries", List.of(paper("ENG", start, null, null), paper("ENG", start, null, null))))
+                .andExpect(status().isBadRequest());
+        putJson(dateSheetPath(termId), exam, Map.of("gradeId", g, "entries", List.of()))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.errorCode").value("VALIDATION_FAILED"));
+        putJson(dateSheetPath(termId), token("SUBJECT_TEACHER"), Map.of("gradeId", g, "entries", List.of(paper("ENG", start, null, null))))
+                .andExpect(status().isForbidden());
+
+        // a null date clears the paper; MATH keeps its date
+        putJson(dateSheetPath(termId), exam, Map.of("gradeId", g, "entries", List.of(paper("ENG", null, "09:30", "12:30"))))
+                .andExpect(status().isOk());
+        ExamSubject cleared = subjectRepository.findByExamTermIdAndGradeIdAndSubjectCode(UUID.fromString(termId), grade.getGradeId(), "ENG").orElseThrow();
+        assertThat(cleared.getExamDate()).isNull();
+        assertThat(cleared.getStartTime()).isNull();
+        assertThat(subjectRepository.findByExamTermIdAndGradeIdAndSubjectCode(UUID.fromString(termId), grade.getGradeId(), "MATH").orElseThrow().getExamDate())
+                .isEqualTo(start.plusDays(2));
+    }
+
+    @Test
+    @DisplayName("Admit cards of a section: one page per student with the date sheet; students on hold are withheld")
+    void admitCardsForASection() throws Exception {
+        String termId = term("Periodic Test 2", 20, null);
+        String path = "/api/v1/exams/terms/" + termId + "/admit-cards";
+        String sectionId = section.getSectionId().toString();
+
+        getAs(path, token("EXAM_CONTROLLER"), "sectionId", sectionId).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("date sheet")));
+        getAs(path, token("EXAM_CONTROLLER")).andExpect(status().isBadRequest());
+        schedule(termId);
+
+        ResultActions all = getAs(path, token("EXAM_CONTROLLER"), "sectionId", sectionId).andExpect(status().isOk())
+                .andExpect(header().string("Content-Type", "application/pdf"))
+                .andExpect(header().string("X-Admit-Cards", "3")).andExpect(header().string("X-Admit-Cards-Withheld", "0"))
+                .andExpect(header().string("Content-Disposition", org.hamcrest.Matchers.containsString("Admit-cards-PT2-Class-6-A.pdf")));
+        String text = pdfText(all);
+        assertThat(text).contains("ADMIT CARD", "Asha Test", "Bilal Test",
+                "Chitra Test", "English", "Mathematics", "09:30 AM - 12:30 PM", "Class 6-A", "PT2-EX-ASHA-",
+                "passport-size photo", "Principal's signature", "Page 3 of 3");
+        assertThat(text.indexOf("English")).isLessThan(text.indexOf("Mathematics")); // by date, not set-up order
+
+        // the class teacher prints their own section
+        getAs(path, token("CLASS_TEACHER"), "sectionId", sectionId).andExpect(status().isOk());
+
+        hold(bilal, "Fee dues");
+        String withheld = pdfText(getAs(path, token("EXAM_CONTROLLER"), "sectionId", sectionId).andExpect(status().isOk())
+                .andExpect(header().string("X-Admit-Cards", "2")).andExpect(header().string("X-Admit-Cards-Withheld", "1")));
+        assertThat(withheld).contains("Asha Test").doesNotContain("Bilal");
+    }
+
+    @Test
+    @DisplayName("One student's date sheet: the child's own parent reads it by date; another family's child 404")
+    void studentDateSheet() throws Exception {
+        String termId = term("Periodic Test 2", 20, null);
+        schedule(termId);
+        String parent = token("APPLICANT_PARENT", TENANT, PARENT);
+        String path = "/api/v1/exams/students/" + asha.getStudentId() + "/date-sheet";
+
+        JsonNode sheet = data(getAs(path, parent, "examTermId", termId).andExpect(status().isOk()));
+        assertThat(sheet.path("termName").asText()).isEqualTo("Periodic Test 2");
+        assertThat(sheet.path("className").asText()).isEqualTo("Class 6-A");
+        assertThat(sheet.path("papers")).hasSize(2);
+        assertThat(sheet.path("papers").get(0).path("subjectCode").asText()).isEqualTo("ENG"); // by date
+        assertThat(sheet.path("papers").get(0).path("startTime").asText()).startsWith("09:30");
+        assertThat(sheet.path("papers").get(1).path("startTime").isNull()).isTrue();
+        assertThat(sheet.path("admitCardWithheld").asBoolean()).isFalse();
+        assertThat(sheet.path("withheldReason").isNull()).isTrue();
+
+        // on hold: still sees the date sheet, but is told the admit card is withheld and why
+        hold(asha, "Fee dues");
+        JsonNode held = data(getAs(path, parent, "examTermId", termId).andExpect(status().isOk()));
+        assertThat(held.path("admitCardWithheld").asBoolean()).isTrue();
+        assertThat(held.path("withheldReason").asText()).isEqualTo("Fee dues");
+        assertThat(held.path("papers")).hasSize(2);
+
+        getAs("/api/v1/exams/students/" + bilal.getStudentId() + "/date-sheet", parent, "examTermId", termId).andExpect(status().isNotFound());
+        getAs(path, parent).andExpect(status().isBadRequest());
+        getAs(path, token("EXAM_CONTROLLER"), "examTermId", termId).andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("One student's admit card: staff and the child's own parent; 409 when on hold; another family's child 404")
+    void admitCardForOneStudent() throws Exception {
+        String termId = term("Half-Yearly", 30, null);
+        schedule(termId);
+        String parent = token("APPLICANT_PARENT", TENANT, PARENT);
+
+        String own = pdfText(getAs("/api/v1/exams/students/" + asha.getStudentId() + "/admit-card", parent, "examTermId", termId)
+                .andExpect(status().isOk()).andExpect(header().string("X-Admit-Cards", "1")));
+        assertThat(own).contains("Asha Test", "HY-" + asha.getStudentUid(), "Half-Yearly");
+
+        getAs("/api/v1/exams/students/" + bilal.getStudentId() + "/admit-card", parent, "examTermId", termId).andExpect(status().isNotFound());
+        getAs("/api/v1/exams/students/" + asha.getStudentId() + "/admit-card", parent).andExpect(status().isBadRequest());
+
+        hold(bilal, "Fee dues");
+        getAs("/api/v1/exams/students/" + bilal.getStudentId() + "/admit-card", token("EXAM_CONTROLLER"), "examTermId", termId)
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("Fee dues")));
+    }
+
+    /** The text a reader shows, extracted from the PDF through its ToUnicode maps */
+    static String extracted(byte[] pdf) {
+        try (var doc = org.apache.pdfbox.Loader.loadPDF(pdf)) {
+            return new org.apache.pdfbox.text.PDFTextStripper().getText(doc);
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
         }
     }
 }
