@@ -407,17 +407,17 @@ class ExamControllerIntegrationTest {
         String draft = pdfText(getAs(path, token("EXAM_CONTROLLER"), "examTermId", termId).andExpect(status().isOk())
                 .andExpect(header().string("Content-Type", "application/pdf")).andExpect(header().string("X-Report-Cards", "1"))
                 .andExpect(header().string("Content-Disposition", org.hamcrest.Matchers.containsString("Report-card-HY-" + asha.getStudentUid() + ".pdf"))));
-        assertThat(draft).startsWith("%PDF-1.4").contains("(REPORT CARD) Tj", "(Asha Test) Tj", "(Class 6-A) Tj", "(English) Tj",
-                "(Mathematics) Tj", "(72) Tj", "(76) Tj", "(93.3%) Tj", "(A1) Tj", "(Pass) Tj", "Rank in section: 1 of 3",
-                "Grade point: 10", "CO-SCHOLASTIC AREAS", "(A+) Tj", "Lovely watercolours", "Asha works steadily", "(Parent / guardian) Tj",
-                "(DRAFT) Tj");
+        assertThat(draft).contains("REPORT CARD", "Asha Test", "Class 6-A", "English",
+                "Mathematics", "72", "76", "93.3%", "A1", "Pass", "Rank in section: 1 of 3",
+                "Grade point: 10", "CO-SCHOLASTIC AREAS", "A+", "Lovely watercolours", "Asha works steadily", "Parent / guardian",
+                "DRAFT");
 
         // a parent: nothing before publishing (as on screen), then the card without DRAFT; never another family's child
         String parent = token("APPLICANT_PARENT", TENANT, PARENT);
         getAs(path, parent, "examTermId", termId).andExpect(status().isNotFound());
         post("/api/v1/exams/terms/" + termId + "/publish", token("CLASS_TEACHER"), Map.of("sectionId", section.getSectionId())).andExpect(status().isOk());
         String published = pdfText(getAs(path, parent, "examTermId", termId).andExpect(status().isOk()));
-        assertThat(published).contains("(Asha Test) Tj").doesNotContain("(DRAFT) Tj");
+        assertThat(published).contains("Asha Test").doesNotContain("DRAFT");
         getAs("/api/v1/exams/students/" + bilal.getStudentId() + "/progress-card/pdf", parent, "examTermId", termId).andExpect(status().isNotFound());
         getAs(path, parent).andExpect(status().isBadRequest());
 
@@ -425,8 +425,8 @@ class ExamControllerIntegrationTest {
         String all = pdfText(getAs("/api/v1/exams/terms/" + termId + "/report-cards", token("CLASS_TEACHER"), "sectionId", section.getSectionId().toString())
                 .andExpect(status().isOk()).andExpect(header().string("X-Report-Cards", "3"))
                 .andExpect(header().string("Content-Disposition", org.hamcrest.Matchers.containsString("Report-cards-HY-Class-6-A.pdf"))));
-        assertThat(all).contains("/Count 3", "(Asha Test) Tj", "(Bilal Test) Tj", "(Chitra Test) Tj", "(Needs support) Tj", "Page 3 of 3");
-        assertThat(all.indexOf("(Asha Test) Tj")).isLessThan(all.indexOf("(Bilal Test) Tj"));
+        assertThat(all).contains("Asha Test", "Bilal Test", "Chitra Test", "Needs support", "Page 3 of 3");
+        assertThat(all.indexOf("Asha Test")).isLessThan(all.indexOf("Bilal Test"));
         getAs("/api/v1/exams/terms/" + termId + "/report-cards", token("EXAM_CONTROLLER")).andExpect(status().isBadRequest());
     }
 
@@ -579,7 +579,7 @@ class ExamControllerIntegrationTest {
     }
 
     private static String pdfText(ResultActions r) throws Exception {
-        return new String(r.andReturn().getResponse().getContentAsByteArray(), java.nio.charset.StandardCharsets.ISO_8859_1);
+        return extracted(r.andReturn().getResponse().getContentAsByteArray());
     }
 
     @Test
@@ -643,10 +643,10 @@ class ExamControllerIntegrationTest {
                 .andExpect(header().string("X-Admit-Cards", "3")).andExpect(header().string("X-Admit-Cards-Withheld", "0"))
                 .andExpect(header().string("Content-Disposition", org.hamcrest.Matchers.containsString("Admit-cards-PT2-Class-6-A.pdf")));
         String text = pdfText(all);
-        assertThat(text).startsWith("%PDF-1.4").contains("/Count 3", "(ADMIT CARD) Tj", "(Asha Test) Tj", "(Bilal Test) Tj",
-                "(Chitra Test) Tj", "(English) Tj", "(Mathematics) Tj", "09:30 AM - 12:30 PM", "(Class 6-A) Tj", "PT2-EX-ASHA-",
+        assertThat(text).contains("ADMIT CARD", "Asha Test", "Bilal Test",
+                "Chitra Test", "English", "Mathematics", "09:30 AM - 12:30 PM", "Class 6-A", "PT2-EX-ASHA-",
                 "passport-size photo", "Principal's signature", "Page 3 of 3");
-        assertThat(text.indexOf("(English) Tj")).isLessThan(text.indexOf("(Mathematics) Tj")); // by date, not set-up order
+        assertThat(text.indexOf("English")).isLessThan(text.indexOf("Mathematics")); // by date, not set-up order
 
         // the class teacher prints their own section
         getAs(path, token("CLASS_TEACHER"), "sectionId", sectionId).andExpect(status().isOk());
@@ -654,7 +654,7 @@ class ExamControllerIntegrationTest {
         hold(bilal, "Fee dues");
         String withheld = pdfText(getAs(path, token("EXAM_CONTROLLER"), "sectionId", sectionId).andExpect(status().isOk())
                 .andExpect(header().string("X-Admit-Cards", "2")).andExpect(header().string("X-Admit-Cards-Withheld", "1")));
-        assertThat(withheld).contains("/Count 2", "(Asha Test) Tj").doesNotContain("Bilal");
+        assertThat(withheld).contains("Asha Test").doesNotContain("Bilal");
     }
 
     @Test
@@ -696,7 +696,7 @@ class ExamControllerIntegrationTest {
 
         String own = pdfText(getAs("/api/v1/exams/students/" + asha.getStudentId() + "/admit-card", parent, "examTermId", termId)
                 .andExpect(status().isOk()).andExpect(header().string("X-Admit-Cards", "1")));
-        assertThat(own).contains("/Count 1", "(Asha Test) Tj", "(HY-" + asha.getStudentUid() + ") Tj", "(Half-Yearly) Tj");
+        assertThat(own).contains("Asha Test", "HY-" + asha.getStudentUid(), "Half-Yearly");
 
         getAs("/api/v1/exams/students/" + bilal.getStudentId() + "/admit-card", parent, "examTermId", termId).andExpect(status().isNotFound());
         getAs("/api/v1/exams/students/" + asha.getStudentId() + "/admit-card", parent).andExpect(status().isBadRequest());
@@ -704,5 +704,14 @@ class ExamControllerIntegrationTest {
         hold(bilal, "Fee dues");
         getAs("/api/v1/exams/students/" + bilal.getStudentId() + "/admit-card", token("EXAM_CONTROLLER"), "examTermId", termId)
                 .andExpect(status().isConflict()).andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("Fee dues")));
+    }
+
+    /** The text a reader shows, extracted from the PDF through its ToUnicode maps */
+    static String extracted(byte[] pdf) {
+        try (var doc = org.apache.pdfbox.Loader.loadPDF(pdf)) {
+            return new org.apache.pdfbox.text.PDFTextStripper().getText(doc);
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
     }
 }

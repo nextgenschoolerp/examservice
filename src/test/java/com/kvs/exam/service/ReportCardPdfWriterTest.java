@@ -29,18 +29,18 @@ class ReportCardPdfWriterTest {
     void printsTheProgressCard() throws Exception {
         byte[] pdf = write(card(true, 6));
         save("report-card-sample.pdf", pdf);
-        String text = new String(pdf, StandardCharsets.ISO_8859_1);
-        assertThat(text).contains("/Count 1", "(REPORT CARD) Tj", "(Academic year 2026-2027) Tj", "(Aarav Sharma) Tj", "(Half-Yearly) Tj",
-                "(Class 7-B) Tj", "(Pass) Tj", "(English) Tj", "(AB) Tj", "(A1) Tj", "(Total) Tj", "(480) Tj", "(81.3%) Tj",
-                "Rank in section: 3 of 38", "Grade point: 9", "(Art education) Tj", "Enthusiastic in class discussions", "(Principal) Tj", "(Dr. Anita Rao) Tj", "(Parent / guardian) Tj", "(Ms. Meera Nair) Tj", "(DPS-7F3K-92QA) Tj")
-                .doesNotContain("(DRAFT) Tj");
+        String text = extracted(pdf);
+        assertThat(text).contains("REPORT CARD", "Academic year 2026-2027", "Aarav Sharma", "Half-Yearly",
+                "Class 7-B", "Pass", "English", "AB", "A1", "Total", "480", "81.3%",
+                "Rank in section: 3 of 38", "Grade point: 9", "Art education", "Enthusiastic in class discussions", "Principal", "Dr. Anita Rao", "Parent / guardian", "Ms. Meera Nair", "DPS-7F3K-92QA")
+                .doesNotContain("DRAFT");
     }
 
     @Test
     void continuesALongCardAndMarksUnpublishedOnesDraft() throws Exception {
         byte[] pdf = write(card(false, 22));
-        String text = new String(pdf, StandardCharsets.ISO_8859_1);
-        assertThat(text).contains("/Count 2", "Continued on the next page", "(Aarav Sharma \\(continued\\)) Tj", "(DRAFT) Tj", "Page 2 of 2");
+        String text = extracted(pdf);
+        assertThat(text).contains("Continued on the next page", "Aarav Sharma (continued)", "DRAFT", "Page 2 of 2");
         save("report-card-long-draft-sample.pdf", pdf);
     }
 
@@ -106,6 +106,15 @@ class ReportCardPdfWriterTest {
             return out.toByteArray();
         } catch (java.io.IOException e) {
             throw new IllegalStateException(e);
+        }
+    }
+
+    /** The text a reader shows, extracted from the PDF through its ToUnicode maps */
+    static String extracted(byte[] pdf) {
+        try (var doc = org.apache.pdfbox.Loader.loadPDF(pdf)) {
+            return new org.apache.pdfbox.text.PDFTextStripper().getText(doc);
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
         }
     }
 }

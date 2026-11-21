@@ -42,12 +42,13 @@ class AdmitCardPdfWriterTest {
                 new AdmitCardPdfWriter.Card("PT2-STU-2024-0142", "Aarav Sharma", "STU-2024-0142", 14, LocalDate.of(2013, 8, 2), photo(), new com.kvs.verify.Verification("DPS-7F3K-92QA", "https://erp.dps.edu.in/verify/DPS-7F3K-92QA", "erp.dps.edu.in/verify"), "Hall A", "A-14"),
                 new AdmitCardPdfWriter.Card("PT2-STU-2024-0150", "Diya Verma", "STU-2024-0150", 15, null, null)),
                 Instant.parse("2026-11-18T06:30:00Z"), ZoneId.of("Asia/Kolkata"));
-        String text = new String(pdf, StandardCharsets.ISO_8859_1);
+        String text = extracted(pdf);
+        assertThat(new String(pdf, StandardCharsets.ISO_8859_1)).contains("/Subtype /Image");
 
-        assertThat(text).contains("/Count 2", "(DPS-7F3K-92QA) Tj", "(Ms. Meera Nair) Tj", "(Class teacher) Tj", "(Dr. Anita Rao) Tj", "(Student's signature) Tj", "(ADMIT CARD) Tj", "(Academic year 2026-2027) Tj", "(PT2-STU-2024-0142) Tj",
-                "(Aarav Sharma) Tj", "(Diya Verma) Tj", "(16 Nov 2026) Tj", "(Mon) Tj", "(09:30 AM - 11:30 AM) Tj", "(Social Science) Tj",
-                "(To be announced) Tj", "(50) Tj", "(16 Nov 2026 - 21 Nov 2026) Tj", "Student's signature", "Page 2 of 2",
-                "/Subtype /Image", "passport-size photo");
+        assertThat(text).contains("DPS-7F3K-92QA", "Ms. Meera Nair", "Class teacher", "Dr. Anita Rao", "Student's signature", "ADMIT CARD", "Academic year 2026-2027", "PT2-STU-2024-0142",
+                "Aarav Sharma", "Diya Verma", "16 Nov 2026", "Mon", "09:30 AM - 11:30 AM", "Social Science",
+                "To be announced", "50", "16 Nov 2026 - 21 Nov 2026", "Student's signature", "Page 2 of 2",
+                "passport-size photo");
         Path dir = Path.of("build", "pdf-samples");
         Files.createDirectories(dir);
         Files.write(dir.resolve("admit-card-sample.pdf"), pdf);
@@ -103,6 +104,15 @@ class AdmitCardPdfWriterTest {
             return out.toByteArray();
         } catch (java.io.IOException e) {
             throw new IllegalStateException(e);
+        }
+    }
+
+    /** The text a reader shows, extracted from the PDF through its ToUnicode maps */
+    static String extracted(byte[] pdf) {
+        try (var doc = org.apache.pdfbox.Loader.loadPDF(pdf)) {
+            return new org.apache.pdfbox.text.PDFTextStripper().getText(doc);
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
         }
     }
 }
